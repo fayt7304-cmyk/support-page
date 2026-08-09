@@ -2163,7 +2163,7 @@ function renderPage(env, { successMessage = "", errorMessage = "", successTicket
   })();
   </script>
 </body>
-
+</html>`;
 }
 
 
@@ -2232,47 +2232,50 @@ function renderThemeScript() {
 
 
 function renderNotFound() {
-  return `<!doctype html>
-<html lang="fr">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
-  <meta name="theme-color" content="#181715">
-  <link rel="icon" href="https://afmarbre.com/favicon.ico" sizes="any">
-  <title>Page introuvable | A-F Marbre Support</title>
-  <style>
-    body{margin:0;background:#f5f2ec;color:#181715;font-family:system-ui,sans-serif;min-height:100vh}
-    .top{background:#181715;color:#e8e2d9;font-size:12px;padding:10px 20px;display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}
-    .top a{color:#fff}
-    main{width:min(640px,calc(100% - 40px));margin:48px auto;padding:42px;background:#fffdf9;border:1px solid #dcd4c9;box-shadow:0 12px 35px rgba(32,27,21,.07)}
-    small{text-transform:uppercase;letter-spacing:.16em;color:#7a5b38;font-weight:800}
-    h1{font:400 48px/1.05 Georgia,serif;margin:12px 0 18px}
-    p{color:#716b62;line-height:1.7}
-    .actions{display:flex;flex-wrap:wrap;gap:10px;margin-top:22px}
-    .actions a{display:inline-flex;align-items:center;min-height:44px;padding:0 16px;background:#181715;color:#fff;text-decoration:none;font-weight:700;font-size:13px}
-    .actions a.secondary{background:transparent;color:#181715;border:1px solid #181715}
-    a:focus-visible{outline:3px solid #a78255;outline-offset:2px}
-  </style>
-</head>
-<body>
-  <div class="top">
-    <span>A-F Marbre — Centre d'assistance</span>
-    <span><a href="mailto:support@afmarbre.com">support@afmarbre.com</a> · <a href="https://wa.me/212661959239" target="_blank" rel="noopener">WhatsApp</a></span>
-  </div>
-  <main>
-    <small>Erreur 404</small>
-    <h1>Page introuvable.</h1>
-    <p>Cette adresse n'existe pas sur le centre d'assistance A-F Marbre. Vous pouvez revenir au formulaire, écrire à l'équipe ou ouvrir le chatbot.</p>
-    <div class="actions">
-      <a href="/">Retour au support</a>
-      <a class="secondary" href="https://chat.afmarbre.com/" target="_blank" rel="noopener">Chatbot</a>
-      <a class="secondary" href="https://wa.me/212661959239?text=Bonjour%2C%20je%20vous%20contacte%20depuis%20le%20support%20A-F%20Marbre." target="_blank" rel="noopener">WhatsApp</a>
-      <a class="secondary" href="mailto:support@afmarbre.com">E-mail</a>
-    </div>
-  </main>
-</body>
-</html>`;
+  return [
+    "<!doctype html>",
+    '<html lang="fr">',
+    "<head>",
+    '  <meta charset="utf-8">',
+    '  <meta name="viewport" content="width=device-width,initial-scale=1">',
+    '  <meta name="theme-color" content="#181715">',
+    '  <link rel="icon" href="https://afmarbre.com/favicon.ico" sizes="any">',
+    "  <title>Page introuvable | A-F Marbre Support</title>",
+    "  <style>",
+    "    body{margin:0;background:#f5f2ec;color:#181715;font-family:system-ui,sans-serif;min-height:100vh}",
+    "    .top{background:#181715;color:#e8e2d9;font-size:12px;padding:10px 20px;display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}",
+    "    .top a{color:#fff}",
+    "    main{width:min(640px,calc(100% - 40px));margin:48px auto;padding:42px;background:#fffdf9;border:1px solid #dcd4c9;box-shadow:0 12px 35px rgba(32,27,21,.07)}",
+    "    small{text-transform:uppercase;letter-spacing:.16em;color:#7a5b38;font-weight:800}",
+    "    h1{font:400 48px/1.05 Georgia,serif;margin:12px 0 18px}",
+    "    p{color:#716b62;line-height:1.7}",
+    "    .actions{display:flex;flex-wrap:wrap;gap:10px;margin-top:22px}",
+    "    .actions a{display:inline-flex;align-items:center;min-height:44px;padding:0 16px;background:#181715;color:#fff;text-decoration:none;font-weight:700;font-size:13px}",
+    "    .actions a.secondary{background:transparent;color:#181715;border:1px solid #181715}",
+    "    a:focus-visible{outline:3px solid #a78255;outline-offset:2px}",
+    "  </style>",
+    "</head>",
+    "<body>",
+    '  <div class="top">',
+    "    <span>A-F Marbre — Centre d'assistance</span>",
+    '    <span><a href="mailto:support@afmarbre.com">support@afmarbre.com</a> · <a href="https://wa.me/212661959239" target="_blank" rel="noopener">WhatsApp</a></span>',
+    "  </div>",
+    "  <main>",
+    "    <small>Erreur 404</small>",
+    "    <h1>Page introuvable.</h1>",
+    "    <p>Cette adresse n'existe pas sur le centre d'assistance A-F Marbre. Vous pouvez revenir au formulaire, écrire à l'équipe ou ouvrir le chatbot.</p>",
+    '    <div class="actions">',
+    '      <a href="/">Retour au support</a>',
+    '      <a class="secondary" href="https://chat.afmarbre.com/" target="_blank" rel="noopener">Chatbot</a>',
+    '      <a class="secondary" href="https://wa.me/212661959239?text=Bonjour%2C%20je%20vous%20contacte%20depuis%20le%20support%20A-F%20Marbre." target="_blank" rel="noopener">WhatsApp</a>',
+    '      <a class="secondary" href="mailto:support@afmarbre.com">E-mail</a>',
+    "    </div>",
+    "  </main>",
+    "</body>",
+    "</html>",
+  ].join("\n");
 }
+
 
 function htmlResponse(body, status = 200) {
   return new Response(body, {
