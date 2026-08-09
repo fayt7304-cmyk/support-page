@@ -2168,64 +2168,68 @@ function renderPage(env, { successMessage = "", errorMessage = "", successTicket
 
 
 function renderThemeScript() {
-  return `(function(){
-    var KEY="afmarbre_theme";
-    var LEGACY="mac_theme";
-    var MODES=["system","light","dark"];
-    function valid(v){return MODES.indexOf(v)!==-1;}
-    function cookieValue(){
-      var parts=document.cookie.split(";");
-      for(var i=0;i<parts.length;i++){
-        var p=parts[i].trim();
-        if(p.indexOf(KEY+"=")===0) return decodeURIComponent(p.slice(KEY.length+1));
-      }
-      return "";
-    }
-    function preference(){
-      var c=cookieValue();
-      if(valid(c)) return c;
-      try {
-        var local=localStorage.getItem(KEY)||localStorage.getItem(LEGACY)||"";
-        if(valid(local)) return local;
-      } catch(e) {}
-      return "system";
-    }
-    function resolved(pref){
-      return pref==="system" && window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : (pref==="system"?"light":pref);
-    }
-    function paint(pref){
-      var mode=resolved(pref);
-      document.documentElement.dataset.theme=mode;
-      document.documentElement.dataset.themePreference=pref;
-      document.documentElement.style.colorScheme=mode;
-      var meta=document.querySelector('meta[name="theme-color"]');
-      if(meta) meta.setAttribute("content",mode==="dark"?"#12110f":"#f5f2ec");
-      document.querySelectorAll("[data-af-theme]").forEach(function(btn){
-        var active=btn.getAttribute("data-af-theme")===pref;
-        btn.classList.toggle("active",active);
-        btn.setAttribute("aria-pressed",active?"true":"false");
-      });
-    }
-    function save(pref){
-      if(!valid(pref)) return;
-      try { localStorage.setItem(KEY,pref); } catch(e) {}
-      document.cookie=KEY+"="+encodeURIComponent(pref)+"; Path=/; Domain=.afmarbre.com; Max-Age=31536000; SameSite=Lax; Secure";
-      paint(pref);
-      window.dispatchEvent(new CustomEvent("afmarbre-theme-change",{detail:{preference:pref,resolved:resolved(pref)}}));
-    }
-    window.AFMarbreTheme={get:preference,set:save,apply:paint};
-    paint(preference());
-    document.addEventListener("DOMContentLoaded",function(){
-      paint(preference());
-      document.querySelectorAll("[data-af-theme]").forEach(function(btn){
-        btn.addEventListener("click",function(){save(btn.getAttribute("data-af-theme"));});
-      });
-    });
-    if(window.matchMedia){
-      window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change",function(){if(preference()==="system") paint("system");});
-    }
-  })();`;
+  // Plain string join — avoids nested regex/template issues in the Worker bundle.
+  return [
+    "(function(){",
+    'var KEY="afmarbre_theme";',
+    'var LEGACY="mac_theme";',
+    'var MODES=["system","light","dark"];',
+    "function valid(v){return MODES.indexOf(v)!==-1;}",
+    "function cookieValue(){",
+    '  var parts=document.cookie.split(";");',
+    "  for(var i=0;i<parts.length;i++){",
+    "    var p=parts[i].trim();",
+    '    if(p.indexOf(KEY+"=")===0) return decodeURIComponent(p.slice(KEY.length+1));',
+    "  }",
+    '  return "";',
+    "}",
+    "function preference(){",
+    "  var c=cookieValue();",
+    "  if(valid(c)) return c;",
+    "  try {",
+    '    var local=localStorage.getItem(KEY)||localStorage.getItem(LEGACY)||"";',
+    "    if(valid(local)) return local;",
+    "  } catch(e) {}",
+    '  return "system";',
+    "}",
+    "function resolved(pref){",
+    '  return pref==="system" && window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : (pref==="system"?"light":pref);',
+    "}",
+    "function paint(pref){",
+    "  var mode=resolved(pref);",
+    "  document.documentElement.dataset.theme=mode;",
+    "  document.documentElement.dataset.themePreference=pref;",
+    "  document.documentElement.style.colorScheme=mode;",
+    "  var meta=document.querySelector('meta[name=\"theme-color\"]');",
+    '  if(meta) meta.setAttribute("content",mode==="dark"?"#12110f":"#f5f2ec");',
+    '  document.querySelectorAll("[data-af-theme]").forEach(function(btn){',
+    '    var active=btn.getAttribute("data-af-theme")===pref;',
+    '    btn.classList.toggle("active",active);',
+    '    btn.setAttribute("aria-pressed",active?"true":"false");',
+    "  });",
+    "}",
+    "function save(pref){",
+    "  if(!valid(pref)) return;",
+    "  try { localStorage.setItem(KEY,pref); } catch(e) {}",
+    '  document.cookie=KEY+"="+encodeURIComponent(pref)+"; Path=/; Domain=.afmarbre.com; Max-Age=31536000; SameSite=Lax; Secure";',
+    "  paint(pref);",
+    '  window.dispatchEvent(new CustomEvent("afmarbre-theme-change",{detail:{preference:pref,resolved:resolved(pref)}}));',
+    "}",
+    "window.AFMarbreTheme={get:preference,set:save,apply:paint};",
+    "paint(preference());",
+    'document.addEventListener("DOMContentLoaded",function(){',
+    "  paint(preference());",
+    '  document.querySelectorAll("[data-af-theme]").forEach(function(btn){',
+    '    btn.addEventListener("click",function(){save(btn.getAttribute("data-af-theme"));});',
+    "  });",
+    "});",
+    "if(window.matchMedia){",
+    '  window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change",function(){if(preference()==="system") paint("system");});',
+    "}",
+    "})();",
+  ].join("\n");
 }
+
 
 function renderNotFound() {
   return `<!doctype html>
