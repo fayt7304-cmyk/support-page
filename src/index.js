@@ -316,6 +316,9 @@ function renderPage(env, { successMessage = "", errorMessage = "" } = {}) {
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="theme-color" content="#181715">
+  <link rel="icon" href="https://afmarbre.com/favicon.ico" sizes="any">
+  <link rel="shortcut icon" href="https://afmarbre.com/favicon.ico">
+  <link rel="apple-touch-icon" href="https://afmarbre.com/favicon.ico">
   <title>Support client | A-F Marbre</title>
   <meta name="description" content="Assistance A-F Marbre pour vos devis, commandes, livraisons, poses, travaux d’entretien, cristallisation et demandes SAV.">
   <link rel="canonical" href="https://support.afmarbre.com/">
@@ -615,7 +618,7 @@ function renderPage(env, { successMessage = "", errorMessage = "" } = {}) {
 
     .contact-strip {
       display: grid;
-      grid-template-columns: 1.2fr 1fr 1fr 1.15fr;
+      grid-template-columns: 1.15fr 1fr 1fr 1fr 1.15fr;
       background: var(--surface);
       border: 1px solid var(--line);
       box-shadow: var(--shadow-soft);
@@ -857,6 +860,62 @@ function renderPage(env, { successMessage = "", errorMessage = "" } = {}) {
       color: #fff;
       border-color: var(--ink);
     }
+
+    .chatbot-card {
+      position: relative;
+      overflow: hidden;
+      background:
+        linear-gradient(135deg, rgba(167,130,85,.11), transparent 58%),
+        var(--surface);
+    }
+
+    .chatbot-card::after {
+      content: "AI";
+      position: absolute;
+      right: 18px;
+      top: 10px;
+      color: rgba(167,130,85,.12);
+      font-family: Georgia, serif;
+      font-size: 72px;
+      line-height: 1;
+    }
+
+    .chatbot-card .eyebrow {
+      position: relative;
+      z-index: 1;
+      color: var(--stone-deep);
+      font-size: 10px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: .16em;
+    }
+
+    .chatbot-card h3,
+    .chatbot-card p,
+    .chatbot-card .chat-button {
+      position: relative;
+      z-index: 1;
+    }
+
+    .chat-button {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 48px;
+      margin-top: 21px;
+      border: 1px solid var(--ink);
+      background: var(--ink);
+      color: #fff;
+      text-decoration: none;
+      font-size: 13px;
+      font-weight: 800;
+    }
+
+    .chat-button:hover {
+      background: var(--stone-deep);
+      border-color: var(--stone-deep);
+    }
+
 
     .side-card h3 {
       margin: 0;
@@ -1107,8 +1166,9 @@ function renderPage(env, { successMessage = "", errorMessage = "" } = {}) {
       }
 
       .contact-strip { grid-template-columns: 1fr 1fr; }
-      .contact-item:nth-child(2) { border-right: 0; }
-      .contact-item:nth-child(-n+2) { border-bottom: 1px solid var(--line); }
+      .contact-item { border-bottom: 1px solid var(--line); }
+      .contact-item:nth-child(even) { border-right: 0; }
+      .contact-item:last-child { border-bottom: 0; }
 
       .support-layout { grid-template-columns: 1fr; }
       .side { grid-template-columns: 1fr 1fr; }
@@ -1226,8 +1286,9 @@ function renderPage(env, { successMessage = "", errorMessage = "" } = {}) {
               Devis, commande, livraison, pose, SAV ou entretien : notre équipe vous accompagne avec la même exigence que celle apportée à nos réalisations en pierre naturelle.
             </p>
             <div class="hero-actions">
-              <a class="button button-light" href="#demande">Envoyer une demande</a>
-              <a class="button button-ghost" href="https://wa.me/212661959239" target="_blank" rel="noopener">Écrire sur WhatsApp</a>
+              <a class="button button-light" href="https://chat.afmarbre.com/" target="_blank" rel="noopener">Parler avec notre chatbot</a>
+              <a class="button button-ghost" href="#demande">Envoyer une demande</a>
+              <a class="button button-ghost" href="https://wa.me/212661959239" target="_blank" rel="noopener">WhatsApp</a>
             </div>
           </div>
           <div class="hero-note">
@@ -1240,6 +1301,10 @@ function renderPage(env, { successMessage = "", errorMessage = "" } = {}) {
 
     <section class="shell">
       <div class="contact-strip" aria-label="Contacts rapides">
+        <a class="contact-item" href="https://chat.afmarbre.com/" target="_blank" rel="noopener">
+          <span class="label">Chatbot A-F Marbre</span>
+          <strong>Discuter maintenant ↗</strong>
+        </a>
         <a class="contact-item" href="tel:+212522969736">
           <span class="label">Téléphone</span>
           <strong>05 22 96 97 36</strong>
@@ -1360,6 +1425,13 @@ function renderPage(env, { successMessage = "", errorMessage = "" } = {}) {
           </section>
 
           <aside class="side">
+            <section class="card side-card chatbot-card">
+              <span class="eyebrow">Réponse immédiate</span>
+              <h3>Discutez avec notre chatbot.</h3>
+              <p>Pour les questions rapides, notre assistant en ligne peut vous orienter avant de contacter l’équipe.</p>
+              <a class="chat-button" href="https://chat.afmarbre.com/" target="_blank" rel="noopener">Ouvrir le chatbot ↗</a>
+            </section>
+
             <section class="card side-card dark">
               <h3>Besoin d’un échange direct ?</h3>
               <p>Notre équipe est joignable du lundi au samedi pour vos demandes liées à vos projets en marbre et pierre naturelle.</p>
@@ -1390,6 +1462,7 @@ function renderPage(env, { successMessage = "", errorMessage = "" } = {}) {
               <h3>Liens utiles</h3>
               <p>Accédez rapidement aux services A-F Marbre.</p>
               <div class="mini-links">
+                <a href="https://chat.afmarbre.com/" target="_blank" rel="noopener">Chatbot A-F Marbre</a>
                 <a href="https://afmarbre.com/" target="_blank" rel="noopener">Retour au site A-F Marbre</a>
                 <a href="https://afmarbre.com/contact/" target="_blank" rel="noopener">Page contact</a>
                 <a href="https://status.afmarbre.com/" target="_blank" rel="noopener">État des services</a>
@@ -1466,6 +1539,7 @@ function renderPage(env, { successMessage = "", errorMessage = "" } = {}) {
         </div>
         <div class="footer-col">
           <span>Assistance</span>
+          <a href="https://chat.afmarbre.com/" target="_blank" rel="noopener">Chatbot A-F Marbre</a>
           <a href="#demande">Ouvrir une demande</a>
           <a href="https://wa.me/212661959239" target="_blank" rel="noopener">WhatsApp</a>
           <a href="https://status.afmarbre.com/" target="_blank" rel="noopener">État des services</a>

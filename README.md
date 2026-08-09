@@ -12,8 +12,10 @@ This version uses a **Cloudflare Worker Custom Domain**. The Worker is the origi
 - Changed the Wrangler configuration from a Worker Route to a Custom Domain
 - Redesigned the page around A-F Marbre's premium marble / natural-stone visual language
 - Uses an A-F Marbre site image for the hero
+- Uses the main afmarbre.com favicon/site icon for browser tabs and Apple home-screen bookmarks
 - Uses the exact showroom map link from the current contact page
 - Added polished desktop + mobile layouts
+- Includes a prominent link to the A-F Marbre chatbot at `https://chat.afmarbre.com/`
 - Added support workflow sections and FAQ
 - Added `/health`
 - Keeps Turnstile, form validation, honeypot protection and Cloudflare Email Service

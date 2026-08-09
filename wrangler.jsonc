@@ -19,7 +19,7 @@
 
   "vars": {
     // Public Turnstile site key. Create the widget for support.afmarbre.com.
-    "TURNSTILE_SITE_KEY": "0x4AAAAAAELV-6t0f-Bafy_y",
+    "TURNSTILE_SITE_KEY": "REPLACE_WITH_YOUR_TURNSTILE_SITE_KEY",
     "TURNSTILE_HOSTNAMES": "support.afmarbre.com",
 
     // SUPPORT_TO must be a verified destination in Cloudflare Email Service.
