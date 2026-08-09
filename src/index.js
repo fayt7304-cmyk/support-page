@@ -2174,8 +2174,12 @@ function renderThemeScript() {
     var MODES=["system","light","dark"];
     function valid(v){return MODES.indexOf(v)!==-1;}
     function cookieValue(){
-      var match=document.cookie.match(new RegExp("(?:^|; )"+KEY.replace(/[.$?*|{}()\\[\\]\\\\/+^]/g,"\\\\$&")+"=([^;]*)"));
-      return match?decodeURIComponent(match[1]):"";
+      var parts=document.cookie.split(";");
+      for(var i=0;i<parts.length;i++){
+        var p=parts[i].trim();
+        if(p.indexOf(KEY+"=")===0) return decodeURIComponent(p.slice(KEY.length+1));
+      }
+      return "";
     }
     function preference(){
       var c=cookieValue();
