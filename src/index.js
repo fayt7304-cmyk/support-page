@@ -51,10 +51,8 @@ export default {
       const ticket = cleanTicket(url.searchParams.get("ticket"));
 
       const html = renderPage(env, {
-        successMessage:
-          success && ticket
-            ? `Votre demande a bien été transmise. Référence : ${ticket}. Notre équipe vous répondra depuis support@afmarbre.com.`
-            : "",
+        successMessage: success && ticket ? ticket : "",
+        successTicket: success && ticket ? ticket : "",
       });
 
       return htmlResponse(request.method === "HEAD" ? "" : html, 200);
@@ -81,6 +79,68 @@ export default {
           "cache-control": "no-store",
         },
       });
+    }
+
+    // Privacy-friendly counters: event name only, no personal data.
+    if (url.pathname === "/metrics" && request.method === "POST") {
+      try {
+        const body = await request.json();
+        const event = String(body?.event || "").slice(0, 40);
+        const allowed = new Set([
+          "page_view",
+          "form_submit_ok",
+          "form_submit_error",
+          "turnstile_fail",
+          "ticket_lookup",
+          "lang_change",
+        ]);
+        if (allowed.has(event)) {
+          console.log(JSON.stringify({ type: "support_metric", event, t: Date.now() }));
+        }
+      } catch {
+        /* ignore bad bodies */
+      }
+      return new Response(null, { status: 204 });
+    }
+
+    // Proxy Better Stack public status JSON (avoids browser CORS issues).
+    if (url.pathname === "/status-summary" && request.method === "GET") {
+      try {
+        const statusUrl = env.STATUS_JSON_URL || "https://status.afmarbre.com/index.json";
+        const resp = await fetch(statusUrl, {
+          headers: { accept: "application/json" },
+          cf: { cacheTtl: 60, cacheEverything: true },
+        });
+        if (!resp.ok) {
+          return new Response(JSON.stringify({ ok: false, state: "unknown" }), {
+            status: 200,
+            headers: { "content-type": "application/json; charset=UTF-8", "cache-control": "public, max-age=30" },
+          });
+        }
+        const data = await resp.json();
+        const attrs = data?.data?.attributes || {};
+        return new Response(
+          JSON.stringify({
+            ok: true,
+            state: attrs.aggregate_state || "unknown",
+            announcement: attrs.announcement || null,
+            updated_at: attrs.updated_at || null,
+            url: "https://status.afmarbre.com/",
+          }),
+          {
+            headers: {
+              "content-type": "application/json; charset=UTF-8",
+              "cache-control": "public, max-age=60",
+            },
+          }
+        );
+      } catch (e) {
+        console.error("status-summary failed", e?.message || e);
+        return new Response(JSON.stringify({ ok: false, state: "unknown", url: "https://status.afmarbre.com/" }), {
+          status: 200,
+          headers: { "content-type": "application/json; charset=UTF-8", "cache-control": "public, max-age=30" },
+        });
+      }
     }
 
     return htmlResponse(renderNotFound(), 404);
@@ -315,7 +375,7 @@ function validateRequest(data) {
   return "";
 }
 
-function renderPage(env, { successMessage = "", errorMessage = "" } = {}) {
+function renderPage(env, { successMessage = "", errorMessage = "", successTicket = "" } = {}) {
   const siteKey =
     env.TURNSTILE_SITE_KEY && !env.TURNSTILE_SITE_KEY.startsWith("REPLACE_")
       ? env.TURNSTILE_SITE_KEY
@@ -1376,6 +1436,159 @@ function renderPage(env, { successMessage = "", errorMessage = "" } = {}) {
       .footer-grid { grid-template-columns: 1fr; gap: 28px; }
       .footer-bottom { flex-direction: column; }
     }
+
+    /* —— Enhancements —— */
+    .skip-link {
+      position: absolute;
+      left: -9999px;
+      top: 0;
+      z-index: 100;
+      padding: 10px 16px;
+      background: var(--ink);
+      color: #fff;
+      font-weight: 800;
+      font-size: 13px;
+      text-decoration: none;
+    }
+    .skip-link:focus {
+      left: 12px;
+      top: 12px;
+    }
+    a:focus-visible,
+    button:focus-visible,
+    input:focus-visible,
+    select:focus-visible,
+    textarea:focus-visible,
+    summary:focus-visible {
+      outline: 3px solid var(--stone);
+      outline-offset: 2px;
+    }
+    .status-strip {
+      display: none;
+      border-bottom: 1px solid var(--line);
+      background: #f3eee4;
+      color: var(--ink);
+      font-size: 13px;
+    }
+    .status-strip.is-visible { display: block; }
+    .status-strip.is-degraded { background: #f7e8c8; }
+    .status-strip.is-down { background: #f8e9e6; color: var(--error-ink); }
+    .status-strip.is-maintenance { background: #e8eef8; }
+    .status-strip-inner {
+      min-height: 40px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+    .status-strip a { font-weight: 700; }
+    .lang-switch {
+      display: inline-flex;
+      gap: 2px;
+      padding: 3px;
+      border: 1px solid var(--line);
+      background: var(--surface-2);
+    }
+    .lang-switch button {
+      min-width: 36px;
+      height: 34px;
+      border: 0;
+      background: transparent;
+      color: var(--muted);
+      cursor: pointer;
+      font: inherit;
+      font-size: 11px;
+      font-weight: 800;
+    }
+    .lang-switch button[aria-pressed="true"] {
+      background: var(--ink);
+      color: var(--surface);
+    }
+    .hours-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 8px;
+      padding: 6px 10px;
+      border: 1px solid var(--line);
+      background: var(--surface-2);
+      font-size: 12px;
+      font-weight: 700;
+    }
+    .hours-pill .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #9a9a9a;
+    }
+    .hours-pill.is-open .dot { background: #2f8f4e; }
+    .hours-pill.is-closed .dot { background: #b4554a; }
+    .ticket-lookup {
+      margin-top: 18px;
+      padding-top: 18px;
+      border-top: 1px solid var(--line);
+    }
+    .ticket-lookup-row {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .ticket-lookup input {
+      flex: 1;
+      min-width: 180px;
+    }
+    .ticket-lookup button {
+      min-height: 48px;
+      padding: 0 16px;
+      border: 1px solid var(--ink);
+      background: transparent;
+      color: var(--ink);
+      font: inherit;
+      font-size: 13px;
+      font-weight: 800;
+      cursor: pointer;
+    }
+    .success-panel {
+      padding: 18px 18px 16px;
+      margin: 0 0 22px;
+      border-left: 3px solid var(--success-ink);
+      background: var(--success);
+      color: var(--success-ink);
+    }
+    .success-panel h4 {
+      margin: 0 0 8px;
+      font-family: Georgia, serif;
+      font-size: 22px;
+      font-weight: 400;
+      color: inherit;
+    }
+    .success-panel ol {
+      margin: 10px 0 0;
+      padding-left: 18px;
+      font-size: 14px;
+      line-height: 1.55;
+    }
+    .success-panel .actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 14px;
+    }
+    .success-panel .actions a {
+      display: inline-flex;
+      align-items: center;
+      min-height: 40px;
+      padding: 0 14px;
+      background: var(--ink);
+      color: #fff;
+      text-decoration: none;
+      font-size: 12px;
+      font-weight: 800;
+    }
+    html[dir="rtl"] body { font-family: "Segoe UI", Tahoma, system-ui, sans-serif; }
+    html[dir="rtl"] .kicker, html[dir="rtl"] .section-head .eyebrow,
+    html[dir="rtl"] .contact-item .label { letter-spacing: 0.04em; }
   </style>
 </head>
 <body>
@@ -1449,8 +1662,12 @@ function renderPage(env, { successMessage = "", errorMessage = "" } = {}) {
           <strong>06 61 95 92 39</strong>
         </a>
         <div class="contact-item">
-          <span class="label">Horaires</span>
-          <strong>Lun. – Sam.<br>09:00 – 18:30</strong>
+          <span class="label" data-i18n="hours_label">Horaires</span>
+          <strong data-i18n-html="hours_value">Lun. – Sam.<br>09:00 – 13:00 · 14:30 – 18:30</strong>
+          <div id="hours-pill" class="hours-pill" aria-live="polite">
+            <span class="dot" aria-hidden="true"></span>
+            <span id="hours-pill-text">…</span>
+          </div>
         </div>
         <a class="contact-item" href="https://maps.app.goo.gl/oAFFAobrUDsu5sAE6" target="_blank" rel="noopener">
           <span class="label">Showroom</span>
@@ -1479,8 +1696,24 @@ function renderPage(env, { successMessage = "", errorMessage = "" } = {}) {
               <div class="secure-badge">Protégé par Cloudflare</div>
             </div>
 
-            ${successMessage ? `<div class="notice success" role="status">${escapeHtml(successMessage)}</div>` : ""}
-            ${errorMessage ? `<div class="notice error" role="alert">${escapeHtml(errorMessage)}</div>` : ""}
+            ${
+              successTicket
+                ? `<div class="success-panel" role="status" aria-live="polite">
+                    <h4 data-i18n="success_title">Demande bien reçue</h4>
+                    <p data-i18n-html="success_ref">Référence : <strong>${escapeHtml(successTicket)}</strong></p>
+                    <ol>
+                      <li data-i18n="success_s1">Notre équipe répond en général sous 1 jour ouvré (souvent plus tôt).</li>
+                      <li data-i18n="success_s2">La réponse part depuis support@afmarbre.com — vérifiez vos spams.</li>
+                      <li data-i18n="success_s3">Pour des photos ou vidéos, envoyez-les sur WhatsApp en citant votre référence.</li>
+                    </ol>
+                    <div class="actions">
+                      <a href="https://wa.me/212661959239?text=${encodeURIComponent("Bonjour, référence " + successTicket + " — ")}" target="_blank" rel="noopener" data-i18n="success_wa">WhatsApp avec ma référence</a>
+                      <a href="mailto:support@afmarbre.com?subject=${encodeURIComponent("Suite ticket " + successTicket)}" data-i18n="success_mail">Écrire un e-mail</a>
+                    </div>
+                  </div>`
+                : ""
+            }
+            ${errorMessage ? `<div class="notice error" role="alert" aria-live="assertive">${escapeHtml(errorMessage)}</div>` : ""}
 
             <form method="post" action="${SUBMIT_PATH}">
               <div class="row">
@@ -1594,8 +1827,17 @@ function renderPage(env, { successMessage = "", errorMessage = "" } = {}) {
                 </div>
               </div>
 
-              <a class="wa-button" href="mailto:support@afmarbre.com?subject=Support%20A-F%20Marbre">Envoyer un e-mail</a>
-              <a class="wa-button" href="https://wa.me/212661959239" target="_blank" rel="noopener">Ouvrir WhatsApp</a>
+              <a class="wa-button" href="mailto:support@afmarbre.com?subject=Support%20A-F%20Marbre" data-i18n="email_btn">Envoyer un e-mail</a>
+              <a class="wa-button" id="wa-prefill" href="https://wa.me/212661959239?text=Bonjour%2C%20je%20vous%20contacte%20depuis%20le%20support%20A-F%20Marbre." target="_blank" rel="noopener" data-i18n="wa_btn">Ouvrir WhatsApp</a>
+
+              <div class="ticket-lookup">
+                <label for="ticket-ref" data-i18n="ticket_label">Vous avez une référence AFM-… ?</label>
+                <div class="ticket-lookup-row">
+                  <input id="ticket-ref" name="ticket-ref" type="text" maxlength="32" placeholder="AFM-20260809-AB12CD34" autocomplete="off" spellcheck="false">
+                  <button type="button" id="ticket-lookup-btn" data-i18n="ticket_btn">Suivre par e-mail</button>
+                </div>
+                <p class="field-help" data-i18n="ticket_help">Ouvre un e-mail prérempli vers support@afmarbre.com.</p>
+              </div>
             </section>
 
             <section class="card side-card">
@@ -1651,20 +1893,32 @@ function renderPage(env, { successMessage = "", errorMessage = "" } = {}) {
 
         <div class="faq">
           <details>
-            <summary>Quelles informations dois-je fournir pour une demande liée à un devis ?</summary>
-            <p>Indiquez autant que possible le type de pierre, les dimensions ou surfaces concernées, la ville du projet, le type de réalisation ainsi que vos coordonnées. Si un devis existe déjà, ajoutez sa référence.</p>
+            <summary data-i18n="faq1_q">Quelles informations dois-je fournir pour une demande liée à un devis ?</summary>
+            <p data-i18n="faq1_a">Indiquez le type de pierre, dimensions ou surfaces, la ville du projet, le type de réalisation et vos coordonnées. Si un devis existe déjà, ajoutez sa référence AFM-… ou DEV-…</p>
           </details>
           <details>
-            <summary>Comment envoyer des photos de mon marbre ou de mon chantier ?</summary>
-            <p>Le formulaire est volontairement léger et n’accepte pas de pièces jointes. Pour des photos ou vidéos, utilisez le bouton WhatsApp et précisez votre nom ou la référence de votre dossier.</p>
+            <summary data-i18n="faq2_q">Comment envoyer des photos de mon marbre ou de mon chantier ?</summary>
+            <p data-i18n="faq2_a">Le formulaire n’accepte pas de pièces jointes. Utilisez WhatsApp et précisez votre nom ou la référence de votre dossier.</p>
           </details>
           <details>
-            <summary>Puis-je demander de l’aide pour l’entretien ou la cristallisation ?</summary>
-            <p>Oui. Sélectionnez « Entretien / cristallisation » dans le formulaire et décrivez l’état de la surface, son emplacement et le type de résultat recherché.</p>
+            <summary data-i18n="faq3_q">Quels sont les délais de pose habituels ?</summary>
+            <p data-i18n="faq3_a">Ils dépendent du matériau, des quantités et de la charge chantier. Après validation du devis, l’équipe communique une fenêtre de pose indicative. Pour un suivi précis, ouvrez une demande « Livraison & pose » avec votre référence.</p>
           </details>
           <details>
-            <summary>Où se trouve le showroom A-F Marbre ?</summary>
-            <p>Le showroom est situé Route Azemmour Km24 Berahma, Maroc. Le lien « Showroom » présent sur cette page ouvre directement l’emplacement dans Google Maps.</p>
+            <summary data-i18n="faq4_q">Comment suivre l’état d’un devis ou d’une commande ?</summary>
+            <p data-i18n="faq4_a">Utilisez le champ « Réf. devis / commande » dans le formulaire, ou l’outil « Vous avez une référence AFM-… ? » pour écrire à support@afmarbre.com avec la référence préremplie. Joignez toute information utile (date du devis, ville).</p>
+          </details>
+          <details>
+            <summary data-i18n="faq5_q">Quels modes de paiement acceptez-vous ?</summary>
+            <p data-i18n="faq5_a">Les modalités (virement, espèces en showroom, échéancier selon le projet) sont confirmées sur le devis. Pour une question de facture ou de paiement, choisissez « Facture / paiement » dans le formulaire.</p>
+          </details>
+          <details>
+            <summary data-i18n="faq6_q">Puis-je demander de l’aide pour l’entretien ou la cristallisation ?</summary>
+            <p data-i18n="faq6_a">Oui. Sélectionnez « Entretien / cristallisation », décrivez l’état de la surface, son emplacement et le résultat souhaité.</p>
+          </details>
+          <details>
+            <summary data-i18n="faq7_q">Où se trouve le showroom A-F Marbre ?</summary>
+            <p data-i18n="faq7_a">Route Azemmour Km24 Berahma, Maroc. Le lien Showroom ouvre Google Maps.</p>
           </details>
         </div>
       </div>
@@ -1699,8 +1953,217 @@ function renderPage(env, { successMessage = "", errorMessage = "" } = {}) {
       </div>
     </div>
   </footer>
+
+  <script>
+  (function () {
+    var LANG_KEY = "afmarbre_support_lang";
+    var strings = {
+      fr: {
+        skip: "Aller au formulaire",
+        status_ok: "Tous les services A-F Marbre fonctionnent normalement.",
+        status_degraded: "Certains services sont dégradés. Consultez la page de statut.",
+        status_down: "Incident en cours sur une partie des services.",
+        status_maint: "Maintenance planifiée en cours.",
+        status_unknown: "Statut temporairement indisponible.",
+        status_link: "Voir le statut",
+        hours_open: "Ouvert maintenant (heure du Maroc)",
+        hours_closed: "Fermé pour le moment (heure du Maroc)",
+        ticket_label: "Vous avez une référence AFM-… ?",
+        ticket_btn: "Suivre par e-mail",
+        ticket_help: "Ouvre un e-mail prérempli vers support@afmarbre.com.",
+        success_title: "Demande bien reçue",
+        success_s1: "Notre équipe répond en général sous 1 jour ouvré (souvent plus tôt).",
+        success_s2: "La réponse part depuis support@afmarbre.com — vérifiez vos spams.",
+        success_s3: "Pour des photos ou vidéos, envoyez-les sur WhatsApp en citant votre référence.",
+        success_wa: "WhatsApp avec ma référence",
+        success_mail: "Écrire un e-mail"
+      },
+      en: {
+        skip: "Skip to form",
+        status_ok: "All A-F Marbre services are operating normally.",
+        status_degraded: "Some services are degraded. Check the status page.",
+        status_down: "An incident is affecting part of our services.",
+        status_maint: "Scheduled maintenance is in progress.",
+        status_unknown: "Status temporarily unavailable.",
+        status_link: "View status",
+        hours_open: "Open now (Morocco time)",
+        hours_closed: "Currently closed (Morocco time)",
+        ticket_label: "Have an AFM-… reference?",
+        ticket_btn: "Follow up by email",
+        ticket_help: "Opens a prefilled email to support@afmarbre.com.",
+        success_title: "Request received",
+        success_s1: "We usually reply within 1 business day (often sooner).",
+        success_s2: "Replies come from support@afmarbre.com — check spam folders.",
+        success_s3: "For photos or videos, send them on WhatsApp with your reference.",
+        success_wa: "WhatsApp with my reference",
+        success_mail: "Write an email"
+      },
+      ar: {
+        skip: "الانتقال إلى النموذج",
+        status_ok: "جميع خدمات A-F Marbre تعمل بشكل طبيعي.",
+        status_degraded: "بعض الخدمات متأثرة. راجع صفحة الحالة.",
+        status_down: "هناك عطل يؤثر على جزء من الخدمات.",
+        status_maint: "صيانة مجدولة جارية.",
+        status_unknown: "الحالة غير متاحة مؤقتاً.",
+        status_link: "عرض الحالة",
+        hours_open: "مفتوح الآن (توقيت المغرب)",
+        hours_closed: "مغلق حالياً (توقيت المغرب)",
+        ticket_label: "لديك مرجع AFM-…؟",
+        ticket_btn: "متابعة عبر البريد",
+        ticket_help: "يفتح بريداً جاهزاً إلى support@afmarbre.com.",
+        success_title: "تم استلام طلبك",
+        success_s1: "نرد عادة خلال يوم عمل واحد (وأحياناً أسرع).",
+        success_s2: "الردود من support@afmarbre.com — تحقق من البريد غير المرغوب.",
+        success_s3: "للصور أو الفيديو، أرسلها عبر واتساب مع رقم المرجع.",
+        success_wa: "واتساب مع مرجعي",
+        success_mail: "إرسال بريد"
+      }
+    };
+
+    function metric(event) {
+      try {
+        fetch("/metrics", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ event: event }),
+          keepalive: true,
+        }).catch(function () {});
+      } catch (e) {}
+    }
+
+    function applyLang(lang) {
+      if (!strings[lang]) lang = "fr";
+      document.documentElement.lang = lang === "ar" ? "ar" : lang;
+      document.documentElement.dir = lang === "ar" ? "rtl" : "ltr";
+      var pack = strings[lang];
+      document.querySelectorAll("[data-i18n]").forEach(function (el) {
+        var k = el.getAttribute("data-i18n");
+        if (pack[k]) el.textContent = pack[k];
+      });
+      document.querySelectorAll(".lang-switch button").forEach(function (btn) {
+        var on = btn.getAttribute("data-lang") === lang;
+        btn.setAttribute("aria-pressed", on ? "true" : "false");
+      });
+      try { localStorage.setItem(LANG_KEY, lang); } catch (e) {}
+      // refresh dynamic status/hours text
+      updateHours();
+      if (window.__lastStatus) renderStatus(window.__lastStatus, pack);
+    }
+
+    function updateHours() {
+      var el = document.getElementById("hours-pill");
+      var text = document.getElementById("hours-pill-text");
+      if (!el || !text) return;
+      var lang = document.documentElement.lang || "fr";
+      if (lang === "ar") lang = "ar";
+      else if (lang !== "en") lang = "fr";
+      var pack = strings[lang] || strings.fr;
+      var now;
+      try {
+        now = new Date(new Date().toLocaleString("en-US", { timeZone: "Africa/Casablanca" }));
+      } catch (e) {
+        now = new Date();
+      }
+      var day = now.getDay(); // 0 Sun
+      var mins = now.getHours() * 60 + now.getMinutes();
+      var open = false;
+      if (day >= 1 && day <= 6) {
+        open = (mins >= 9 * 60 && mins < 13 * 60) || (mins >= 14 * 60 + 30 && mins < 18 * 60 + 30);
+      }
+      el.classList.toggle("is-open", open);
+      el.classList.toggle("is-closed", !open);
+      text.textContent = open ? pack.hours_open : pack.hours_closed;
+    }
+
+    function renderStatus(data, pack) {
+      var strip = document.getElementById("status-strip");
+      var label = document.getElementById("status-strip-text");
+      if (!strip || !label) return;
+      window.__lastStatus = data;
+      pack = pack || strings[document.documentElement.lang] || strings.fr;
+      var state = (data && data.state ? String(data.state) : "unknown").toLowerCase();
+      strip.classList.remove("is-degraded", "is-down", "is-maintenance");
+      var msg = pack.status_unknown;
+      var show = false;
+      if (state === "operational") {
+        msg = pack.status_ok;
+        show = false; // quiet when all good
+      } else if (state === "degraded") {
+        msg = pack.status_degraded;
+        strip.classList.add("is-degraded");
+        show = true;
+      } else if (state === "downtime") {
+        msg = pack.status_down;
+        strip.classList.add("is-down");
+        show = true;
+      } else if (state === "maintenance") {
+        msg = pack.status_maint;
+        strip.classList.add("is-maintenance");
+        show = true;
+      }
+      if (data && data.announcement) {
+        msg = data.announcement;
+        show = true;
+      }
+      label.textContent = msg;
+      if (show) {
+        strip.hidden = false;
+        strip.classList.add("is-visible");
+      } else {
+        strip.hidden = true;
+        strip.classList.remove("is-visible");
+      }
+    }
+
+    function loadStatus() {
+      fetch("/status-summary")
+        .then(function (r) { return r.json(); })
+        .then(function (data) { renderStatus(data); })
+        .catch(function () { renderStatus({ state: "unknown" }); });
+    }
+
+    document.addEventListener("DOMContentLoaded", function () {
+      metric("page_view");
+      var lang = "fr";
+      try { lang = localStorage.getItem(LANG_KEY) || "fr"; } catch (e) {}
+      applyLang(lang);
+
+      document.querySelectorAll(".lang-switch button").forEach(function (btn) {
+        btn.addEventListener("click", function () {
+          applyLang(btn.getAttribute("data-lang"));
+          metric("lang_change");
+        });
+      });
+
+      updateHours();
+      setInterval(updateHours, 60000);
+      loadStatus();
+      setInterval(loadStatus, 120000);
+
+      var ticketBtn = document.getElementById("ticket-lookup-btn");
+      var ticketInput = document.getElementById("ticket-ref");
+      if (ticketBtn && ticketInput) {
+        ticketBtn.addEventListener("click", function () {
+          var ref = (ticketInput.value || "").trim().toUpperCase();
+          if (!ref) {
+            ticketInput.focus();
+            return;
+          }
+          metric("ticket_lookup");
+          var subject = encodeURIComponent("Suivi dossier " + ref);
+          var body = encodeURIComponent("Bonjour,\\n\\nJe souhaite un point sur mon dossier.\\nRéférence : " + ref + "\\n\\nMerci.");
+          window.location.href = "mailto:support@afmarbre.com?subject=" + subject + "&body=" + body;
+        });
+      }
+
+      // Turnstile failure is hard to hook; track form errors via notice presence
+      if (document.querySelector(".notice.error")) metric("form_submit_error");
+      if (document.querySelector(".success-panel")) metric("form_submit_ok");
+    });
+  })();
+  </script>
 </body>
-</html>`;
+
 }
 
 
@@ -1766,22 +2229,38 @@ function renderNotFound() {
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#181715">
+  <link rel="icon" href="https://afmarbre.com/favicon.ico" sizes="any">
   <title>Page introuvable | A-F Marbre Support</title>
   <style>
-    body{margin:0;background:#f5f2ec;color:#181715;font-family:system-ui,sans-serif;display:grid;place-items:center;min-height:100vh}
-    main{width:min(560px,calc(100% - 40px));padding:42px;background:#fff;border:1px solid #dcd4c9}
+    body{margin:0;background:#f5f2ec;color:#181715;font-family:system-ui,sans-serif;min-height:100vh}
+    .top{background:#181715;color:#e8e2d9;font-size:12px;padding:10px 20px;display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}
+    .top a{color:#fff}
+    main{width:min(640px,calc(100% - 40px));margin:48px auto;padding:42px;background:#fffdf9;border:1px solid #dcd4c9;box-shadow:0 12px 35px rgba(32,27,21,.07)}
     small{text-transform:uppercase;letter-spacing:.16em;color:#7a5b38;font-weight:800}
-    h1{font:400 48px/1 Georgia,serif;margin:12px 0 18px}
+    h1{font:400 48px/1.05 Georgia,serif;margin:12px 0 18px}
     p{color:#716b62;line-height:1.7}
-    a{display:inline-block;margin-top:12px;padding:13px 18px;background:#181715;color:#fff;text-decoration:none;font-weight:700;font-size:13px}
+    .actions{display:flex;flex-wrap:wrap;gap:10px;margin-top:22px}
+    .actions a{display:inline-flex;align-items:center;min-height:44px;padding:0 16px;background:#181715;color:#fff;text-decoration:none;font-weight:700;font-size:13px}
+    .actions a.secondary{background:transparent;color:#181715;border:1px solid #181715}
+    a:focus-visible{outline:3px solid #a78255;outline-offset:2px}
   </style>
 </head>
 <body>
+  <div class="top">
+    <span>A-F Marbre — Centre d'assistance</span>
+    <span><a href="mailto:support@afmarbre.com">support@afmarbre.com</a> · <a href="https://wa.me/212661959239" target="_blank" rel="noopener">WhatsApp</a></span>
+  </div>
   <main>
-    <small>A-F Marbre Support</small>
+    <small>Erreur 404</small>
     <h1>Page introuvable.</h1>
-    <p>Cette adresse n’existe pas sur le centre d’assistance A-F Marbre.</p>
-    <a href="/">Retour au support</a>
+    <p>Cette adresse n'existe pas sur le centre d'assistance A-F Marbre. Vous pouvez revenir au formulaire, écrire à l'équipe ou ouvrir le chatbot.</p>
+    <div class="actions">
+      <a href="/">Retour au support</a>
+      <a class="secondary" href="https://chat.afmarbre.com/" target="_blank" rel="noopener">Chatbot</a>
+      <a class="secondary" href="https://wa.me/212661959239?text=Bonjour%2C%20je%20vous%20contacte%20depuis%20le%20support%20A-F%20Marbre." target="_blank" rel="noopener">WhatsApp</a>
+      <a class="secondary" href="mailto:support@afmarbre.com">E-mail</a>
+    </div>
   </main>
 </body>
 </html>`;

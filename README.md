@@ -189,3 +189,39 @@ Flow:
 Only `support@afmarbre.com` is shown publicly on the support page.
 
 Before production, verify `fayt7304@gmail.com` as a Cloudflare Email Service / Email Routing destination.
+
+## Status strip (Better Stack / Better Uptime)
+
+The support page loads a live note from:
+
+```text
+GET https://support.afmarbre.com/status-summary
+```
+
+That Worker route fetches your public Better Stack status JSON:
+
+```text
+https://status.afmarbre.com/index.json
+```
+
+### What you need on Better Stack
+
+1. A **public status page** whose custom domain is `status.afmarbre.com` (or the Better Stack subdomain).
+2. At least one **monitor** published on that status page (API, website, support, chat, etc.).
+3. Confirm in a browser:
+
+```text
+https://status.afmarbre.com/index.json
+```
+
+You should see JSON with `data.attributes.aggregate_state` (`operational`, `degraded`, `downtime`, or `maintenance`).
+
+4. Optional Worker var override:
+
+```jsonc
+"STATUS_JSON_URL": "https://status.afmarbre.com/index.json"
+```
+
+No Better Stack API token is required for this public JSON endpoint.
+
+The status strip stays **hidden while everything is operational**, and appears when the aggregate state is degraded, down, or under maintenance (or when an announcement is set).
