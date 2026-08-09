@@ -43,7 +43,7 @@ If `support.afmarbre.com` already has an existing CNAME record, remove that CNAM
 
 ## 2. Resend via api.afmarbre.com
 
-This support Worker **does not use Cloudflare Email Service anymore**.
+This support Worker **does not use Cloudflare Email Service**. It calls the existing API Worker through a Cloudflare Service Binding.
 
 It sends the validated support ticket server-to-server to:
 
@@ -61,19 +61,12 @@ fayt7304@gmail.com
 
 The Resend message uses the customer's submitted email as `reply_to`, so pressing **Reply** in Gmail addresses the customer directly.
 
-### Shared internal token
+### Worker-to-Worker connection
 
-Create one random secret and set the **same value** on both Workers:
+No shared API token is needed in this version.
 
-```bash
-# On the API/chat Worker:
-npx wrangler secret put SUPPORT_API_TOKEN --config worker/wrangler.toml
+`afmarbre-support` has a Cloudflare Service Binding named `AFMARBRE_API` pointing directly to the existing Worker named `mistral-agent-chat`. The support form therefore does not depend on public DNS, CORS, or an HTTPS call to `api.afmarbre.com`.
 
-# On the support Worker:
-npx wrangler secret put SUPPORT_API_TOKEN
-```
-
-The token is never sent to the browser; it is used only Worker-to-Worker over HTTPS.
 
 ## 3. Configure Turnstile
 
@@ -88,7 +81,7 @@ as an allowed hostname.
 Copy the public site key into `wrangler.jsonc`:
 
 ```jsonc
-"TURNSTILE_SITE_KEY": "YOUR_SITE_KEY"
+"TURNSTILE_SITE_KEY": "0x4AAAAAAELV-6t0f-Bafy_y"
 ```
 
 Store the Turnstile secret as a Worker secret:
@@ -171,18 +164,18 @@ The hero image is loaded from the existing A-F Marbre WordPress media library. I
 
 ## Support Gmail / reply flow
 
-This build uses `fayt7304@gmail.com` as the public support inbox and the destination for support-form tickets.
+This build uses `support@afmarbre.com` as the public support inbox and the primary destination for support-form tickets.
 
-The Worker sends each ticket to that Gmail inbox and keeps the visitor's submitted address as the message `Reply-To`.
+The API sends each ticket to `support@afmarbre.com`, privately BCCs `fayt7304@gmail.com`, and keeps the visitor's submitted address as the message `Reply-To`.
 
 Flow:
 
 1. Customer submits the support form.
-2. Ticket arrives in `fayt7304@gmail.com`.
-3. Press **Reply** in Gmail — the recipient is the customer.
-4. Your reply is sent from your Gmail account.
-5. When the customer replies, the response comes back to `fayt7304@gmail.com`.
+2. The main ticket arrives at `support@afmarbre.com`.
+3. A private BCC copy is also delivered to `fayt7304@gmail.com`.
+4. The customer never sees the Gmail copy address.
+5. Reply from the `support@afmarbre.com` mailbox to keep all customer-facing mail on the A-F Marbre domain.
 
-The Gmail address is also shown publicly on the support page as a direct e-mail contact.
+Only `support@afmarbre.com` is shown publicly on the support page.
 
 Before production, verify `fayt7304@gmail.com` as a Cloudflare Email Service / Email Routing destination.

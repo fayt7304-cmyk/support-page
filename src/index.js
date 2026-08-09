@@ -21,9 +21,25 @@ const CONTACT_METHODS = {
 const BRAND_IMAGE =
   "https://afmarbre.com/wp-content/uploads/2025/09/minimalist-office-interior-design-1024x683.jpg";
 
+const BRAND_FAVICON_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <rect width="64" height="64" rx="10" fill="#f5f2ec"/>
+  <rect x="6.5" y="6.5" width="51" height="51" rx="7" fill="none" stroke="#a59786"/>
+  <text x="32" y="39" text-anchor="middle" font-family="Georgia,Times New Roman,serif" font-size="22" fill="#181715">A·F</text>
+</svg>`;
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
+
+    if ((url.pathname === "/favicon.svg" || url.pathname === "/favicon.ico") && request.method === "GET") {
+      return new Response(BRAND_FAVICON_SVG, {
+        headers: {
+          "content-type": "image/svg+xml; charset=UTF-8",
+          "cache-control": "public, max-age=604800, immutable",
+          "x-content-type-options": "nosniff",
+        },
+      });
+    }
 
     // Redirect the previous /support URL to the new support subdomain root.
     if ((url.pathname === "/support" || url.pathname === "/support/") && request.method === "GET") {
@@ -37,7 +53,7 @@ export default {
       const html = renderPage(env, {
         successMessage:
           success && ticket
-            ? `Votre demande a bien été transmise. Référence : ${ticket}. Notre équipe vous répondra depuis fayt7304@gmail.com.`
+            ? `Votre demande a bien été transmise. Référence : ${ticket}. Notre équipe vous répondra depuis support@afmarbre.com.`
             : "",
       });
 
@@ -140,7 +156,7 @@ async function handleSupportRequest(request, env) {
     );
   }
 
-  if (!env.SUPPORT_API_URL || !env.SUPPORT_API_TOKEN) {
+  if (!env.AFMARBRE_API) {
     return htmlResponse(
       renderPage(env, {
         errorMessage:
@@ -155,12 +171,11 @@ async function handleSupportRequest(request, env) {
   const contactLabel = CONTACT_METHODS[data.contact];
 
   try {
-    const apiResponse = await fetch(env.SUPPORT_API_URL, {
+    const apiRequest = new Request("https://support.afmarbre.internal/api/support", {
       method: "POST",
       headers: {
-        "authorization": `Bearer ${env.SUPPORT_API_TOKEN}`,
         "content-type": "application/json; charset=UTF-8",
-        "user-agent": "afmarbre-support-worker/1.0",
+        "user-agent": "afmarbre-support-worker/2.0",
       },
       body: JSON.stringify({
         ticket,
@@ -178,10 +193,13 @@ async function handleSupportRequest(request, env) {
       }),
     });
 
+    // Cloudflare Service Binding: no public DNS hop and no shared bearer secret.
+    const apiResponse = await env.AFMARBRE_API.fetch(apiRequest);
+
     if (!apiResponse.ok) {
       const detail = (await apiResponse.text()).slice(0, 800);
-      console.error("Support Resend API failed:", apiResponse.status, detail);
-      throw new Error(`Support API returned ${apiResponse.status}`);
+      console.error("Support Resend service failed:", apiResponse.status, detail);
+      throw new Error(`Support service returned ${apiResponse.status}`);
     }
   } catch (error) {
     console.error("Support email failed:", error?.message || error);
@@ -298,9 +316,8 @@ function renderPage(env, { successMessage = "", errorMessage = "" } = {}) {
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="theme-color" content="#181715">
-  <link rel="icon" href="https://afmarbre.com/favicon.ico" sizes="any">
-  <link rel="shortcut icon" href="https://afmarbre.com/favicon.ico">
-  <link rel="apple-touch-icon" href="https://afmarbre.com/favicon.ico">
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <link rel="shortcut icon" href="/favicon.svg">
   <title>Support client | A-F Marbre</title>
   <meta name="description" content="Assistance A-F Marbre pour vos devis, commandes, livraisons, poses, travaux d’entretien, cristallisation et demandes SAV.">
   <link rel="canonical" href="https://support.afmarbre.com/">
@@ -1354,7 +1371,7 @@ function renderPage(env, { successMessage = "", errorMessage = "" } = {}) {
   <div class="topbar">
     <div class="shell topbar-inner">
       <span>A-F Marbre — Fourniture & pose · Maroc</span>
-      <span>Support : <a href="mailto:fayt7304@gmail.com">fayt7304@gmail.com</a> · <a href="https://wa.me/212661959239" target="_blank" rel="noopener">WhatsApp</a></span>
+      <span>Support : <a href="mailto:support@afmarbre.com">support@afmarbre.com</a> · <a href="https://wa.me/212661959239" target="_blank" rel="noopener">WhatsApp</a></span>
     </div>
   </div>
 
@@ -1546,7 +1563,7 @@ function renderPage(env, { successMessage = "", errorMessage = "" } = {}) {
               <div class="support-list">
                 <div class="support-line">
                   <span>E-mail support</span>
-                  <a href="mailto:fayt7304@gmail.com">fayt7304@gmail.com</a>
+                  <a href="mailto:support@afmarbre.com">support@afmarbre.com</a>
                 </div>
                 <div class="support-line">
                   <span>Fixe</span>
@@ -1566,7 +1583,7 @@ function renderPage(env, { successMessage = "", errorMessage = "" } = {}) {
                 </div>
               </div>
 
-              <a class="wa-button" href="mailto:fayt7304@gmail.com?subject=Support%20A-F%20Marbre">Envoyer un e-mail</a>
+              <a class="wa-button" href="mailto:support@afmarbre.com?subject=Support%20A-F%20Marbre">Envoyer un e-mail</a>
               <a class="wa-button" href="https://wa.me/212661959239" target="_blank" rel="noopener">Ouvrir WhatsApp</a>
             </section>
 
@@ -1575,7 +1592,7 @@ function renderPage(env, { successMessage = "", errorMessage = "" } = {}) {
               <p>Accédez rapidement aux services A-F Marbre.</p>
               <div class="mini-links">
                 <a href="https://chat.afmarbre.com/" target="_blank" rel="noopener">Chatbot A-F Marbre</a>
-                <a href="mailto:fayt7304@gmail.com">E-mail support</a>
+                <a href="mailto:support@afmarbre.com">E-mail support</a>
                 <a href="https://afmarbre.com/" target="_blank" rel="noopener">Retour au site A-F Marbre</a>
                 <a href="https://afmarbre.com/contact/" target="_blank" rel="noopener">Page contact</a>
                 <a href="https://status.afmarbre.com/" target="_blank" rel="noopener">État des services</a>
@@ -1653,7 +1670,7 @@ function renderPage(env, { successMessage = "", errorMessage = "" } = {}) {
         <div class="footer-col">
           <span>Assistance</span>
           <a href="https://chat.afmarbre.com/" target="_blank" rel="noopener">Chatbot A-F Marbre</a>
-          <a href="mailto:fayt7304@gmail.com">fayt7304@gmail.com</a>
+          <a href="mailto:support@afmarbre.com">support@afmarbre.com</a>
           <a href="#demande">Ouvrir une demande</a>
           <a href="https://wa.me/212661959239" target="_blank" rel="noopener">WhatsApp</a>
           <a href="https://status.afmarbre.com/" target="_blank" rel="noopener">État des services</a>

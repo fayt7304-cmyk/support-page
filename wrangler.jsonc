@@ -20,14 +20,18 @@
   "vars": {
     // Public Turnstile site key. Create the widget for support.afmarbre.com.
     "TURNSTILE_SITE_KEY": "0x4AAAAAAELV-6t0f-Bafy_y",
-    "TURNSTILE_HOSTNAMES": "support.afmarbre.com",
-    // Existing A-F Marbre API Worker. It owns the Resend API key.
-    "SUPPORT_API_URL": "https://api.afmarbre.com/api/support"
+    "TURNSTILE_HOSTNAMES": "support.afmarbre.com"
   },
+  "services": [
+    {
+      "binding": "AFMARBRE_API",
+      "service": "mistral-agent-chat"
+    }
+  ],
+
   "secrets": {
     "required": [
-      "TURNSTILE_SECRET",
-      "SUPPORT_API_TOKEN"
+      "TURNSTILE_SECRET"
     ]
   }
 }
