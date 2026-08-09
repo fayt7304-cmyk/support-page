@@ -41,20 +41,39 @@ Cloudflare will create and manage the DNS entry and TLS certificate for the Cust
 
 If `support.afmarbre.com` already has an existing CNAME record, remove that CNAME before adding/deploying the Worker Custom Domain. Do **not** point a separate CNAME at a `workers.dev` URL.
 
-## 2. Configure Cloudflare Email Service
+## 2. Resend via api.afmarbre.com
 
-Onboard the sending domain you want to use with Cloudflare Email Service.
+This support Worker **does not use Cloudflare Email Service anymore**.
 
-Then verify the inbox that should receive support tickets.
+It sends the validated support ticket server-to-server to:
 
-Edit `wrangler.jsonc`:
-
-```jsonc
-"SUPPORT_TO": "YOUR_VERIFIED_SUPPORT_INBOX",
-"SUPPORT_FROM": "support@afmarbre.com"
+```text
+https://api.afmarbre.com/api/support
 ```
 
-The Worker sends support submissions only to your configured inbox. The visitor's e-mail is used as the `Reply-To`, so pressing Reply in your inbox answers the customer.
+That endpoint lives in the existing A-F Marbre API Worker (`mistral-agent-chat`) and uses the Resend API key already configured there.
+
+The destination is:
+
+```text
+fayt7304@gmail.com
+```
+
+The Resend message uses the customer's submitted email as `reply_to`, so pressing **Reply** in Gmail addresses the customer directly.
+
+### Shared internal token
+
+Create one random secret and set the **same value** on both Workers:
+
+```bash
+# On the API/chat Worker:
+npx wrangler secret put SUPPORT_API_TOKEN --config worker/wrangler.toml
+
+# On the support Worker:
+npx wrangler secret put SUPPORT_API_TOKEN
+```
+
+The token is never sent to the browser; it is used only Worker-to-Worker over HTTPS.
 
 ## 3. Configure Turnstile
 
@@ -127,21 +146,9 @@ It should return:
 {"ok":true,"service":"afmarbre-support"}
 ```
 
-## 6. Optional hardening after you know the final inbox
+## 6. Email architecture
 
-You can restrict the Cloudflare e-mail binding itself:
-
-```jsonc
-"send_email": [
-  {
-    "name": "EMAIL",
-    "destination_address": "YOUR_VERIFIED_SUPPORT_INBOX",
-    "allowed_sender_addresses": ["support@afmarbre.com"]
-  }
-]
-```
-
-This is a useful defense-in-depth measure.
+Email delivery is handled by Resend in `api.afmarbre.com`; there is no `send_email` binding in this Worker.
 
 ## Project structure
 

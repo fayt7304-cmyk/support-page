@@ -140,12 +140,7 @@ async function handleSupportRequest(request, env) {
     );
   }
 
-  if (
-    !env.EMAIL ||
-    !env.SUPPORT_TO ||
-    env.SUPPORT_TO.includes("replace-me") ||
-    !env.SUPPORT_FROM
-  ) {
+  if (!env.SUPPORT_API_URL || !env.SUPPORT_API_TOKEN) {
     return htmlResponse(
       renderPage(env, {
         errorMessage:
@@ -159,61 +154,37 @@ async function handleSupportRequest(request, env) {
   const typeLabel = REQUEST_TYPES[data.type];
   const contactLabel = CONTACT_METHODS[data.contact];
 
-  const text = [
-    "NOUVELLE DEMANDE — A-F MARBRE SUPPORT",
-    "",
-    `Référence : ${ticket}`,
-    `Type : ${typeLabel}`,
-    `Nom : ${data.name}`,
-    `E-mail : ${data.email}`,
-    `Téléphone : ${data.phone || "Non renseigné"}`,
-    `Contact préféré : ${contactLabel}`,
-    `Réf. devis / commande : ${data.reference || "Non renseignée"}`,
-    `Sujet : ${data.subject}`,
-    "",
-    "MESSAGE",
-    data.message,
-    "",
-    `IP : ${request.headers.get("CF-Connecting-IP") || "Non disponible"}`,
-  ].join("\n");
-
-  const html = `
-  <div style="margin:0;background:#f3f0ea;padding:32px 16px;font-family:Arial,sans-serif;color:#171717">
-    <div style="max-width:680px;margin:auto;background:#fff;border:1px solid #ded8ce">
-      <div style="padding:28px 30px;background:#191817;color:#fff">
-        <div style="font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:#c8ad85">A-F Marbre</div>
-        <h1 style="margin:8px 0 0;font-family:Georgia,serif;font-size:28px;font-weight:normal">Nouvelle demande support</h1>
-      </div>
-      <div style="padding:28px 30px">
-        <p style="margin-top:0;color:#6c665e">Référence <strong style="color:#171717">${escapeHtml(ticket)}</strong></p>
-        <table cellpadding="9" cellspacing="0" style="width:100%;border-collapse:collapse">
-          ${emailRow("Type", typeLabel)}
-          ${emailRow("Nom", data.name)}
-          ${emailRow("E-mail", data.email)}
-          ${emailRow("Téléphone", data.phone || "Non renseigné")}
-          ${emailRow("Préférence", contactLabel)}
-          ${emailRow("Réf. devis / commande", data.reference || "Non renseignée")}
-          ${emailRow("Sujet", data.subject)}
-        </table>
-        <div style="margin-top:22px;padding:18px;background:#f5f2ec;border-left:3px solid #a88355">
-          <strong>Message</strong>
-          <p style="white-space:pre-wrap;line-height:1.6">${escapeHtml(data.message)}</p>
-        </div>
-      </div>
-    </div>
-  </div>`;
-
   try {
-    await env.EMAIL.send({
-      to: env.SUPPORT_TO,
-      from: { email: env.SUPPORT_FROM, name: "A-F Marbre Support" },
-      replyTo: { email: data.email, name: data.name },
-      subject: `[A-F Marbre] ${ticket} — ${typeLabel} — ${data.subject}`,
-      text,
-      html,
+    const apiResponse = await fetch(env.SUPPORT_API_URL, {
+      method: "POST",
+      headers: {
+        "authorization": `Bearer ${env.SUPPORT_API_TOKEN}`,
+        "content-type": "application/json; charset=UTF-8",
+        "user-agent": "afmarbre-support-worker/1.0",
+      },
+      body: JSON.stringify({
+        ticket,
+        name: data.name,
+        email: data.email,
+        phone: data.phone,
+        reference: data.reference,
+        type: data.type,
+        type_label: typeLabel,
+        contact: data.contact,
+        contact_label: contactLabel,
+        subject: data.subject,
+        message: data.message,
+        client_ip: request.headers.get("CF-Connecting-IP") || "",
+      }),
     });
+
+    if (!apiResponse.ok) {
+      const detail = (await apiResponse.text()).slice(0, 800);
+      console.error("Support Resend API failed:", apiResponse.status, detail);
+      throw new Error(`Support API returned ${apiResponse.status}`);
+    }
   } catch (error) {
-    console.error("Support email failed:", error?.code, error?.message);
+    console.error("Support email failed:", error?.message || error);
     return htmlResponse(
       renderPage(env, {
         errorMessage:

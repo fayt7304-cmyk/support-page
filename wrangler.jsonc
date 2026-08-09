@@ -19,23 +19,15 @@
 
   "vars": {
     // Public Turnstile site key. Create the widget for support.afmarbre.com.
-    "TURNSTILE_SITE_KEY": "0x4AAAAAAELV-6t0f-Bafy_y",
+    "TURNSTILE_SITE_KEY": "REPLACE_WITH_YOUR_TURNSTILE_SITE_KEY",
     "TURNSTILE_HOSTNAMES": "support.afmarbre.com",
-
-    // SUPPORT_TO must be a verified destination in Cloudflare Email Service.
-    "SUPPORT_TO": "fayt7304@gmail.com",
-
-    // This sender domain must be onboarded for Cloudflare Email Service.
-    "SUPPORT_FROM": "support@afmarbre.com"
+    // Existing A-F Marbre API Worker. It owns the Resend API key.
+    "SUPPORT_API_URL": "https://api.afmarbre.com/api/support"
   },
-
-  "send_email": [
-    {
-      "name": "EMAIL",
-      "destination_address": "fayt7304@gmail.com",
-      "allowed_sender_addresses": [
-        "support@afmarbre.com"
-      ]
-    }
-  ]
+  "secrets": {
+    "required": [
+      "TURNSTILE_SECRET",
+      "SUPPORT_API_TOKEN"
+    ]
+  }
 }
