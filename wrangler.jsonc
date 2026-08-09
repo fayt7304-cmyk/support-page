@@ -31,7 +31,8 @@
 
   "secrets": {
     "required": [
-      "TURNSTILE_SECRET"
+      "TURNSTILE_SECRET",
+      "SUPPORT_API_TOKEN"
     ]
   }
 }

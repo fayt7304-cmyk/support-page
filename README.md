@@ -63,9 +63,19 @@ The Resend message uses the customer's submitted email as `reply_to`, so pressin
 
 ### Worker-to-Worker connection
 
-No shared API token is needed in this version.
+`afmarbre-support` uses a Cloudflare Service Binding named `AFMARBRE_API` pointing to the Worker `mistral-agent-chat`. That avoids a public DNS hop and CORS, while still authenticating with a shared secret.
 
-`afmarbre-support` has a Cloudflare Service Binding named `AFMARBRE_API` pointing directly to the existing Worker named `mistral-agent-chat`. The support form therefore does not depend on public DNS, CORS, or an HTTPS call to `api.afmarbre.com`.
+Set the **same** `SUPPORT_API_TOKEN` on both Workers:
+
+```bash
+# Paul / API Worker (mistral-agent-chat)
+npx wrangler secret put SUPPORT_API_TOKEN
+
+# Support portal Worker (this project)
+npx wrangler secret put SUPPORT_API_TOKEN
+```
+
+The support Worker sends `Authorization: Bearer <SUPPORT_API_TOKEN>` on every ticket. The API Worker rejects requests without a matching token (protects the public `https://api.afmarbre.com/api/support` route as well).
 
 
 ## 3. Configure Turnstile

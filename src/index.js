@@ -166,6 +166,16 @@ async function handleSupportRequest(request, env) {
     );
   }
 
+  if (!env.SUPPORT_API_TOKEN) {
+    return htmlResponse(
+      renderPage(env, {
+        errorMessage:
+          "Le service d’envoi n’est pas encore configuré. Merci d’utiliser WhatsApp ou le téléphone.",
+      }),
+      503
+    );
+  }
+
   const ticket = makeTicketId();
   const typeLabel = REQUEST_TYPES[data.type];
   const contactLabel = CONTACT_METHODS[data.contact];
@@ -175,6 +185,7 @@ async function handleSupportRequest(request, env) {
       method: "POST",
       headers: {
         "content-type": "application/json; charset=UTF-8",
+        "authorization": `Bearer ${env.SUPPORT_API_TOKEN}`,
         "user-agent": "afmarbre-support-worker/2.0",
       },
       body: JSON.stringify({
@@ -193,7 +204,7 @@ async function handleSupportRequest(request, env) {
       }),
     });
 
-    // Cloudflare Service Binding: no public DNS hop and no shared bearer secret.
+    // Cloudflare Service Binding: no public DNS hop; still uses SUPPORT_API_TOKEN for auth on the API Worker.
     const apiResponse = await env.AFMARBRE_API.fetch(apiRequest);
 
     if (!apiResponse.ok) {
