@@ -1,5 +1,6 @@
 const HOME_PATH = "/";
 const SUBMIT_PATH = "/submit";
+const THEME_SCRIPT_PATH = "/theme.js";
 const TURNSTILE_ACTION = "support_request";
 
 const REQUEST_TYPES = {
@@ -36,7 +37,7 @@ export default {
       const html = renderPage(env, {
         successMessage:
           success && ticket
-            ? `Votre demande a bien été transmise. Référence : ${ticket}`
+            ? `Votre demande a bien été transmise. Référence : ${ticket}. Notre équipe vous répondra depuis fayt7304@gmail.com.`
             : "",
       });
 
@@ -45,6 +46,16 @@ export default {
 
     if (url.pathname === SUBMIT_PATH && request.method === "POST") {
       return handleSupportRequest(request, env);
+    }
+
+    if (url.pathname === THEME_SCRIPT_PATH && request.method === "GET") {
+      return new Response(renderThemeScript(), {
+        headers: {
+          "content-type": "application/javascript; charset=UTF-8",
+          "cache-control": "public, max-age=3600",
+          "x-content-type-options": "nosniff",
+        },
+      });
     }
 
     if (url.pathname === "/health" && request.method === "GET") {
@@ -322,6 +333,7 @@ function renderPage(env, { successMessage = "", errorMessage = "" } = {}) {
   <title>Support client | A-F Marbre</title>
   <meta name="description" content="Assistance A-F Marbre pour vos devis, commandes, livraisons, poses, travaux d’entretien, cristallisation et demandes SAV.">
   <link rel="canonical" href="https://support.afmarbre.com/">
+  <script src="/theme.js"></script>
   <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
   <style>
     :root {
@@ -985,6 +997,10 @@ function renderPage(env, { successMessage = "", errorMessage = "" } = {}) {
       color: var(--ink);
     }
 
+    .wa-button + .wa-button {
+      margin-top: 10px;
+    }
+
     .mini-links {
       display: grid;
       margin-top: 20px;
@@ -1159,6 +1175,119 @@ function renderPage(env, { successMessage = "", errorMessage = "" } = {}) {
       font-size: 11px;
     }
 
+    /* Shared A-F Marbre appearance control */
+    .theme-switch {
+      display: inline-flex;
+      align-items: center;
+      gap: 2px;
+      padding: 3px;
+      border: 1px solid var(--line);
+      background: var(--surface-2);
+    }
+
+    .theme-switch button {
+      width: 34px;
+      height: 34px;
+      display: grid;
+      place-items: center;
+      border: 0;
+      background: transparent;
+      color: var(--muted);
+      cursor: pointer;
+      font: inherit;
+      font-size: 15px;
+    }
+
+    .theme-switch button:hover {
+      color: var(--ink);
+      background: var(--paper-deep);
+    }
+
+    .theme-switch button.active,
+    .theme-switch button[aria-pressed="true"] {
+      background: var(--ink);
+      color: var(--surface);
+    }
+
+    html[data-theme="dark"] {
+      --ink: #f3eee6;
+      --ink-soft: #e5ddd2;
+      --paper: #12110f;
+      --paper-deep: #1b1916;
+      --surface: #1a1917;
+      --surface-2: #211f1c;
+      --line: #3a352f;
+      --line-dark: rgba(255,255,255,.14);
+      --muted: #aaa197;
+      --stone: #c8a873;
+      --stone-deep: #ddc18e;
+      --stone-light: #e2cda7;
+      --success: #193021;
+      --success-ink: #a9d7b0;
+      --error: #3b201d;
+      --error-ink: #ffaaa0;
+      --shadow: 0 26px 70px rgba(0,0,0,.34);
+      --shadow-soft: 0 12px 35px rgba(0,0,0,.24);
+    }
+
+    html[data-theme="dark"] body {
+      background:
+        linear-gradient(rgba(220,190,145,.028) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(220,190,145,.028) 1px, transparent 1px),
+        var(--paper);
+    }
+
+    html[data-theme="dark"] .topbar,
+    html[data-theme="dark"] .hero-frame,
+    html[data-theme="dark"] .side-card.dark,
+    html[data-theme="dark"] footer {
+      background: #181715;
+    }
+
+    html[data-theme="dark"] header {
+      border-bottom-color: rgba(255,255,255,.08);
+      background: rgba(18,17,15,.9);
+    }
+
+    html[data-theme="dark"] .brand-mark {
+      border-color: #625b51;
+      background: linear-gradient(135deg, #292620, #1d1b18);
+      box-shadow: inset 0 0 0 5px rgba(255,255,255,.025);
+    }
+
+    html[data-theme="dark"] .nav-link { color: #c0b7aa; }
+    html[data-theme="dark"] .nav-link:hover { color: #fff; }
+
+    html[data-theme="dark"] .nav-button,
+    html[data-theme="dark"] button[type="submit"],
+    html[data-theme="dark"] .chat-button {
+      border-color: #f3eee6;
+      background: #f3eee6;
+      color: #181715;
+    }
+
+    html[data-theme="dark"] button[type="submit"]:hover,
+    html[data-theme="dark"] .chat-button:hover {
+      border-color: var(--stone);
+      background: var(--stone);
+      color: #181715;
+    }
+
+    html[data-theme="dark"] input,
+    html[data-theme="dark"] select,
+    html[data-theme="dark"] textarea {
+      background: #151412;
+      color: var(--ink);
+    }
+
+    html[data-theme="dark"] .button-light { color: #181715; }
+    html[data-theme="dark"] .wa-button:hover { color: #181715; }
+    html[data-theme="dark"] .card { background: var(--surface); }
+    html[data-theme="dark"] .secure-badge { background: var(--surface-2); color: var(--muted); }
+    html[data-theme="dark"] .contact-strip { background: var(--surface); }
+    html[data-theme="dark"] .footer-brand strong,
+    html[data-theme="dark"] .footer-col a:hover { color: #fff; }
+
     @media (max-width: 940px) {
       .hero-content {
         width: 76%;
@@ -1190,7 +1319,9 @@ function renderPage(env, { successMessage = "", errorMessage = "" } = {}) {
       .brand-mark { width: 40px; height: 40px; }
       .brand-copy strong { font-size: 18px; }
       .nav-link { display: none; }
-      .nav-button { min-height: 40px; padding: 0 12px; }
+      .nav { gap: 10px; }
+      .theme-switch button { width: 31px; height: 31px; }
+      .nav-button { display: none; }
 
       .hero { padding-top: 20px; }
       .hero-frame { min-height: 650px; }
@@ -1252,7 +1383,7 @@ function renderPage(env, { successMessage = "", errorMessage = "" } = {}) {
   <div class="topbar">
     <div class="shell topbar-inner">
       <span>A-F Marbre — Fourniture & pose · Maroc</span>
-      <span>Besoin d’une réponse rapide ? <a href="https://wa.me/212661959239" target="_blank" rel="noopener">WhatsApp 06 61 95 92 39</a></span>
+      <span>Support : <a href="mailto:fayt7304@gmail.com">fayt7304@gmail.com</a> · <a href="https://wa.me/212661959239" target="_blank" rel="noopener">WhatsApp</a></span>
     </div>
   </div>
 
@@ -1269,6 +1400,11 @@ function renderPage(env, { successMessage = "", errorMessage = "" } = {}) {
       <nav class="nav-actions" aria-label="Navigation">
         <a class="nav-link" href="https://afmarbre.com/">Site principal</a>
         <a class="nav-link" href="https://status.afmarbre.com/" target="_blank" rel="noopener">État des services</a>
+        <div class="theme-switch" role="group" aria-label="Thème du site">
+          <button type="button" data-af-theme="system" aria-label="Thème système" title="Système">◐</button>
+          <button type="button" data-af-theme="light" aria-label="Thème clair" title="Clair">☀</button>
+          <button type="button" data-af-theme="dark" aria-label="Thème sombre" title="Sombre">☾</button>
+        </div>
         <a class="nav-button" href="#demande">Ouvrir une demande</a>
       </nav>
     </div>
@@ -1412,7 +1548,7 @@ function renderPage(env, { successMessage = "", errorMessage = "" } = {}) {
               <div class="turnstile">
                 ${
                   siteKey
-                    ? `<div class="cf-turnstile" data-sitekey="${escapeHtml(siteKey)}" data-action="${TURNSTILE_ACTION}" data-theme="light"></div>`
+                    ? `<div class="cf-turnstile" data-sitekey="${escapeHtml(siteKey)}" data-action="${TURNSTILE_ACTION}" data-theme="auto"></div>`
                     : `<span class="field-help">Turnstile doit être configuré avant la mise en production du formulaire.</span>`
                 }
               </div>
@@ -1438,6 +1574,10 @@ function renderPage(env, { successMessage = "", errorMessage = "" } = {}) {
 
               <div class="support-list">
                 <div class="support-line">
+                  <span>E-mail support</span>
+                  <a href="mailto:fayt7304@gmail.com">fayt7304@gmail.com</a>
+                </div>
+                <div class="support-line">
                   <span>Fixe</span>
                   <a href="tel:+212522969736">05 22 96 97 36</a>
                 </div>
@@ -1455,6 +1595,7 @@ function renderPage(env, { successMessage = "", errorMessage = "" } = {}) {
                 </div>
               </div>
 
+              <a class="wa-button" href="mailto:fayt7304@gmail.com?subject=Support%20A-F%20Marbre">Envoyer un e-mail</a>
               <a class="wa-button" href="https://wa.me/212661959239" target="_blank" rel="noopener">Ouvrir WhatsApp</a>
             </section>
 
@@ -1463,6 +1604,7 @@ function renderPage(env, { successMessage = "", errorMessage = "" } = {}) {
               <p>Accédez rapidement aux services A-F Marbre.</p>
               <div class="mini-links">
                 <a href="https://chat.afmarbre.com/" target="_blank" rel="noopener">Chatbot A-F Marbre</a>
+                <a href="mailto:fayt7304@gmail.com">E-mail support</a>
                 <a href="https://afmarbre.com/" target="_blank" rel="noopener">Retour au site A-F Marbre</a>
                 <a href="https://afmarbre.com/contact/" target="_blank" rel="noopener">Page contact</a>
                 <a href="https://status.afmarbre.com/" target="_blank" rel="noopener">État des services</a>
@@ -1540,6 +1682,7 @@ function renderPage(env, { successMessage = "", errorMessage = "" } = {}) {
         <div class="footer-col">
           <span>Assistance</span>
           <a href="https://chat.afmarbre.com/" target="_blank" rel="noopener">Chatbot A-F Marbre</a>
+          <a href="mailto:fayt7304@gmail.com">fayt7304@gmail.com</a>
           <a href="#demande">Ouvrir une demande</a>
           <a href="https://wa.me/212661959239" target="_blank" rel="noopener">WhatsApp</a>
           <a href="https://status.afmarbre.com/" target="_blank" rel="noopener">État des services</a>
@@ -1559,6 +1702,63 @@ function renderPage(env, { successMessage = "", errorMessage = "" } = {}) {
   </footer>
 </body>
 </html>`;
+}
+
+
+function renderThemeScript() {
+  return `(function(){
+    var KEY="afmarbre_theme";
+    var LEGACY="mac_theme";
+    var MODES=["system","light","dark"];
+    function valid(v){return MODES.indexOf(v)!==-1;}
+    function cookieValue(){
+      var match=document.cookie.match(new RegExp("(?:^|; )"+KEY.replace(/[.$?*|{}()\\[\\]\\\\/+^]/g,"\\\\$&")+"=([^;]*)"));
+      return match?decodeURIComponent(match[1]):"";
+    }
+    function preference(){
+      var c=cookieValue();
+      if(valid(c)) return c;
+      try {
+        var local=localStorage.getItem(KEY)||localStorage.getItem(LEGACY)||"";
+        if(valid(local)) return local;
+      } catch(e) {}
+      return "system";
+    }
+    function resolved(pref){
+      return pref==="system" && window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : (pref==="system"?"light":pref);
+    }
+    function paint(pref){
+      var mode=resolved(pref);
+      document.documentElement.dataset.theme=mode;
+      document.documentElement.dataset.themePreference=pref;
+      document.documentElement.style.colorScheme=mode;
+      var meta=document.querySelector('meta[name="theme-color"]');
+      if(meta) meta.setAttribute("content",mode==="dark"?"#12110f":"#f5f2ec");
+      document.querySelectorAll("[data-af-theme]").forEach(function(btn){
+        var active=btn.getAttribute("data-af-theme")===pref;
+        btn.classList.toggle("active",active);
+        btn.setAttribute("aria-pressed",active?"true":"false");
+      });
+    }
+    function save(pref){
+      if(!valid(pref)) return;
+      try { localStorage.setItem(KEY,pref); } catch(e) {}
+      document.cookie=KEY+"="+encodeURIComponent(pref)+"; Path=/; Domain=.afmarbre.com; Max-Age=31536000; SameSite=Lax; Secure";
+      paint(pref);
+      window.dispatchEvent(new CustomEvent("afmarbre-theme-change",{detail:{preference:pref,resolved:resolved(pref)}}));
+    }
+    window.AFMarbreTheme={get:preference,set:save,apply:paint};
+    paint(preference());
+    document.addEventListener("DOMContentLoaded",function(){
+      paint(preference());
+      document.querySelectorAll("[data-af-theme]").forEach(function(btn){
+        btn.addEventListener("click",function(){save(btn.getAttribute("data-af-theme"));});
+      });
+    });
+    if(window.matchMedia){
+      window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change",function(){if(preference()==="system") paint("system");});
+    }
+  })();`;
 }
 
 function renderNotFound() {

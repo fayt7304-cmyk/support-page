@@ -16,6 +16,8 @@ This version uses a **Cloudflare Worker Custom Domain**. The Worker is the origi
 - Uses the exact showroom map link from the current contact page
 - Added polished desktop + mobile layouts
 - Includes a prominent link to the A-F Marbre chatbot at `https://chat.afmarbre.com/`
+- Adds Light / Dark / System theme controls to the support portal
+- Shares the selected theme across `*.afmarbre.com` with the first-party `afmarbre_theme` cookie
 - Added support workflow sections and FAQ
 - Added `/health`
 - Keeps Turnstile, form validation, honeypot protection and Cloudflare Email Service
@@ -158,3 +160,22 @@ afmarbre-support-worker/
 The support form does not accept file uploads. Customers who need to send photos/videos are directed to WhatsApp. This keeps the public form lightweight and reduces abuse risk.
 
 The hero image is loaded from the existing A-F Marbre WordPress media library. If you later change the WordPress image URL, update `BRAND_IMAGE` near the top of `src/index.js`.
+
+
+## Support Gmail / reply flow
+
+This build uses `fayt7304@gmail.com` as the public support inbox and the destination for support-form tickets.
+
+The Worker sends each ticket to that Gmail inbox and keeps the visitor's submitted address as the message `Reply-To`.
+
+Flow:
+
+1. Customer submits the support form.
+2. Ticket arrives in `fayt7304@gmail.com`.
+3. Press **Reply** in Gmail — the recipient is the customer.
+4. Your reply is sent from your Gmail account.
+5. When the customer replies, the response comes back to `fayt7304@gmail.com`.
+
+The Gmail address is also shown publicly on the support page as a direct e-mail contact.
+
+Before production, verify `fayt7304@gmail.com` as a Cloudflare Email Service / Email Routing destination.
