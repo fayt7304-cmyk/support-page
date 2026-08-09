@@ -1,115 +1,158 @@
 # A-F Marbre Support — Cloudflare Worker
 
-Ready-to-deploy support page for:
+Premium support portal for:
 
-- `https://afmarbre.com/support`
-- form endpoint: `https://afmarbre.com/support/submit`
+**https://support.afmarbre.com/**
 
-The existing WordPress site remains the origin. The Worker route is limited to `afmarbre.com/support*`.
+This version uses a **Cloudflare Worker Custom Domain**. The Worker is the origin for the complete `support.afmarbre.com` hostname, while `afmarbre.com` remains your existing WordPress site.
 
-## What is included
+## What changed in this version
 
-- Responsive French support page
-- A-F Marbre contact details
-- WhatsApp and phone shortcuts
-- Support categories for devis, livraison/pose, SAV, entretien and facturation
-- Cloudflare Turnstile anti-spam validation
-- Server-side validation and escaping
-- Honeypot field
-- Ticket reference generation
-- Cloudflare Email Service sending through an `EMAIL` binding
-- Security headers / CSP
-- Link to `status.afmarbre.com`
+- Moved from `afmarbre.com/support` to `support.afmarbre.com`
+- Changed the Wrangler configuration from a Worker Route to a Custom Domain
+- Redesigned the page around A-F Marbre's premium marble / natural-stone visual language
+- Uses an A-F Marbre site image for the hero
+- Uses the exact showroom map link from the current contact page
+- Added polished desktop + mobile layouts
+- Added support workflow sections and FAQ
+- Added `/health`
+- Keeps Turnstile, form validation, honeypot protection and Cloudflare Email Service
+- Generates unique support references
+- Keeps customer e-mail as `Reply-To`
 
-## 1. Configure Cloudflare Email Service
+## 1. Important DNS note
 
-In Cloudflare, onboard `afmarbre.com` as a sending domain for Email Service.
+The Wrangler config contains:
 
-Then verify the inbox that should receive support requests.
+```jsonc
+"routes": [
+  {
+    "pattern": "support.afmarbre.com",
+    "custom_domain": true
+  }
+]
+```
+
+Cloudflare will create and manage the DNS entry and TLS certificate for the Custom Domain.
+
+If `support.afmarbre.com` already has an existing CNAME record, remove that CNAME before adding/deploying the Worker Custom Domain. Do **not** point a separate CNAME at a `workers.dev` URL.
+
+## 2. Configure Cloudflare Email Service
+
+Onboard the sending domain you want to use with Cloudflare Email Service.
+
+Then verify the inbox that should receive support tickets.
 
 Edit `wrangler.jsonc`:
 
 ```jsonc
-"SUPPORT_TO": "YOUR_VERIFIED_INBOX",
+"SUPPORT_TO": "YOUR_VERIFIED_SUPPORT_INBOX",
 "SUPPORT_FROM": "support@afmarbre.com"
 ```
 
-`SUPPORT_FROM` must use a domain that Cloudflare Email Service has accepted for sending.
+The Worker sends support submissions only to your configured inbox. The visitor's e-mail is used as the `Reply-To`, so pressing Reply in your inbox answers the customer.
 
-The Worker intentionally sends only to your support inbox and uses the customer's email as `Reply-To`. It does **not** send an automatic reply to arbitrary visitor addresses.
+## 3. Configure Turnstile
 
-## 2. Configure Turnstile
+Create a Turnstile widget and add:
 
-Create a Turnstile widget for:
+```text
+support.afmarbre.com
+```
 
-- `afmarbre.com`
+as an allowed hostname.
 
-Put its public site key in `wrangler.jsonc`:
+Copy the public site key into `wrangler.jsonc`:
 
 ```jsonc
 "TURNSTILE_SITE_KEY": "YOUR_SITE_KEY"
 ```
 
-Store the secret as a Worker secret:
+Store the Turnstile secret as a Worker secret:
 
 ```bash
 npx wrangler@latest secret put TURNSTILE_SECRET
 ```
 
-Paste the Turnstile secret when prompted.
+Paste the secret when Wrangler asks for it.
 
-Do not put the secret in `wrangler.jsonc`.
+Never put the secret directly in `wrangler.jsonc`.
 
-## 3. Deploy
+## 4. Deploy
 
-From this folder:
+From this project directory:
+
+```bash
+npm install
+npm run deploy
+```
+
+or without installing dependencies permanently:
 
 ```bash
 npx wrangler@latest deploy
 ```
 
-The configured Worker Route is:
+When the deployment finishes, open:
 
 ```text
-afmarbre.com/support*
+https://support.afmarbre.com/
 ```
 
-Cloudflare Routes require the domain/zone to be active in Cloudflare and the hostname to be proxied through Cloudflare.
+## 5. Test the form
 
-## 4. Test
+Confirm that:
 
-Open:
+1. `https://support.afmarbre.com/` loads over HTTPS.
+2. The A-F Marbre hero image loads.
+3. Turnstile completes successfully.
+4. A test submission redirects back to `/`.
+5. A reference similar to `AFM-20260809-AB12CD34` appears.
+6. Your configured support inbox receives the ticket.
+7. Pressing Reply addresses the customer's e-mail.
+
+Health endpoint:
 
 ```text
-https://afmarbre.com/support
+https://support.afmarbre.com/health
 ```
 
-Submit a test request and confirm:
+It should return:
 
-1. Turnstile completes.
-2. The browser redirects back to `/support`.
-3. A ticket reference like `AFM-20260809-AB12CD34` is shown.
-4. Your verified support inbox receives the message.
-5. Replying to that email replies directly to the customer.
+```json
+{"ok":true,"service":"afmarbre-support"}
+```
 
-## Optional: stricter email binding
+## 6. Optional hardening after you know the final inbox
 
-Once your final support destination is known, you can restrict the binding itself:
+You can restrict the Cloudflare e-mail binding itself:
 
 ```jsonc
 "send_email": [
   {
     "name": "EMAIL",
-    "destination_address": "YOUR_VERIFIED_INBOX",
+    "destination_address": "YOUR_VERIFIED_SUPPORT_INBOX",
     "allowed_sender_addresses": ["support@afmarbre.com"]
   }
 ]
 ```
 
-This limits what the Worker can send even if code is changed later.
+This is a useful defense-in-depth measure.
+
+## Project structure
+
+```text
+afmarbre-support-worker/
+├── src/
+│   └── index.js
+├── wrangler.jsonc
+├── package.json
+├── .gitignore
+└── README.md
+```
 
 ## Notes
 
-- The form deliberately does not accept file uploads. Customers are directed to WhatsApp for photos, which keeps the Worker simpler and reduces abuse risk.
-- If you want a real ticket dashboard/history instead of email-only support, add D1 storage later.
-- The showroom Google Maps button in the Worker currently opens a generic Google Maps host. Replace it with your exact share link if desired.
+The support form does not accept file uploads. Customers who need to send photos/videos are directed to WhatsApp. This keeps the public form lightweight and reduces abuse risk.
+
+The hero image is loaded from the existing A-F Marbre WordPress media library. If you later change the WordPress image URL, update `BRAND_IMAGE` near the top of `src/index.js`.

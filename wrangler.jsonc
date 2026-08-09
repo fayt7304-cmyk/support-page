@@ -4,24 +4,28 @@
   "main": "src/index.js",
   "compatibility_date": "2026-08-09",
 
-  // Keeps the existing WordPress site as the origin and runs this Worker
-  // only for /support and /support/submit.
+  // The Worker is the origin for the complete support subdomain.
+  // Cloudflare creates/manages the DNS record and TLS certificate.
   "routes": [
     {
-      "pattern": "afmarbre.com/support*",
-      "zone_name": "afmarbre.com"
+      "pattern": "support.afmarbre.com",
+      "custom_domain": true
     }
   ],
 
-  "vars": {
-    // Public Turnstile site key. Create a widget for afmarbre.com.
-    "TURNSTILE_SITE_KEY": "REPLACE_WITH_YOUR_TURNSTILE_SITE_KEY",
-    "TURNSTILE_HOSTNAMES": "afmarbre.com",
+  // Production is served only from the branded custom domain.
+  "workers_dev": false,
+  "preview_urls": false,
 
-    // SUPPORT_TO must be a verified destination in your Cloudflare account.
+  "vars": {
+    // Public Turnstile site key. Create the widget for support.afmarbre.com.
+    "TURNSTILE_SITE_KEY": "REPLACE_WITH_YOUR_TURNSTILE_SITE_KEY",
+    "TURNSTILE_HOSTNAMES": "support.afmarbre.com",
+
+    // SUPPORT_TO must be a verified destination in Cloudflare Email Service.
     "SUPPORT_TO": "replace-me@example.com",
 
-    // The sender domain must be onboarded to Cloudflare Email Service.
+    // This sender domain must be onboarded for Cloudflare Email Service.
     "SUPPORT_FROM": "support@afmarbre.com"
   },
 

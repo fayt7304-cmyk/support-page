@@ -1,12 +1,12 @@
-const SUPPORT_PATH = "/support";
-const SUBMIT_PATH = "/support/submit";
+const HOME_PATH = "/";
+const SUBMIT_PATH = "/submit";
 const TURNSTILE_ACTION = "support_request";
 
 const REQUEST_TYPES = {
   devis: "Devis / commande",
   livraison: "Livraison & pose",
   sav: "SAV / qualité",
-  entretien: "Entretien du marbre",
+  entretien: "Entretien / cristallisation",
   facture: "Facture / paiement",
   autre: "Autre demande",
 };
@@ -17,19 +17,29 @@ const CONTACT_METHODS = {
   whatsapp: "WhatsApp",
 };
 
+const BRAND_IMAGE =
+  "https://afmarbre.com/wp-content/uploads/2025/09/minimalist-office-interior-design-1024x683.jpg";
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
 
-    if ((url.pathname === SUPPORT_PATH || url.pathname === `${SUPPORT_PATH}/`) &&
-        (request.method === "GET" || request.method === "HEAD")) {
+    // Redirect the previous /support URL to the new support subdomain root.
+    if ((url.pathname === "/support" || url.pathname === "/support/") && request.method === "GET") {
+      return Response.redirect(`${url.origin}/`, 308);
+    }
+
+    if (url.pathname === HOME_PATH && (request.method === "GET" || request.method === "HEAD")) {
       const success = url.searchParams.get("success") === "1";
       const ticket = cleanTicket(url.searchParams.get("ticket"));
+
       const html = renderPage(env, {
-        successMessage: success && ticket
-          ? `Votre demande a bien été envoyée. Référence : ${ticket}`
-          : "",
+        successMessage:
+          success && ticket
+            ? `Votre demande a bien été transmise. Référence : ${ticket}`
+            : "",
       });
+
       return htmlResponse(request.method === "HEAD" ? "" : html, 200);
     }
 
@@ -37,13 +47,16 @@ export default {
       return handleSupportRequest(request, env);
     }
 
-    if (url.pathname.startsWith(SUPPORT_PATH)) {
-      // This Worker is intended to sit on afmarbre.com/support*.
-      // Pass anything else under that broad route back to the WordPress origin.
-      return fetch(request);
+    if (url.pathname === "/health" && request.method === "GET") {
+      return new Response(JSON.stringify({ ok: true, service: "afmarbre-support" }), {
+        headers: {
+          "content-type": "application/json; charset=UTF-8",
+          "cache-control": "no-store",
+        },
+      });
     }
 
-    return fetch(request);
+    return htmlResponse(renderNotFound(), 404);
   },
 };
 
@@ -61,14 +74,16 @@ async function handleSupportRequest(request, env) {
     form = await request.formData();
   } catch {
     return htmlResponse(
-      renderPage(env, { errorMessage: "Formulaire invalide. Veuillez réessayer." }),
+      renderPage(env, {
+        errorMessage: "Le formulaire est invalide. Veuillez actualiser la page puis réessayer.",
+      }),
       400
     );
   }
 
-  // Honeypot: silently accept obvious bot submissions without sending mail.
+  // Honeypot. Do not reveal to bots that their submission was discarded.
   if (field(form, "website")) {
-    return Response.redirect(`${new URL(request.url).origin}${SUPPORT_PATH}?success=1&ticket=AFM-RECU`, 303);
+    return Response.redirect(`${new URL(request.url).origin}/?success=1&ticket=AFM-RECU`, 303);
   }
 
   const data = {
@@ -95,7 +110,7 @@ async function handleSupportRequest(request, env) {
     return htmlResponse(
       renderPage(env, {
         errorMessage:
-          "Le formulaire est en cours de configuration. Vous pouvez nous contacter par WhatsApp ou téléphone.",
+          "Le formulaire est en cours de configuration. Vous pouvez nous joindre directement par téléphone ou WhatsApp.",
       }),
       503
     );
@@ -108,7 +123,7 @@ async function handleSupportRequest(request, env) {
     return htmlResponse(
       renderPage(env, {
         errorMessage:
-          "La vérification anti-spam a échoué ou a expiré. Veuillez actualiser la page et réessayer.",
+          "La vérification anti-spam a échoué ou a expiré. Actualisez la page puis réessayez.",
       }),
       403
     );
@@ -134,41 +149,48 @@ async function handleSupportRequest(request, env) {
   const contactLabel = CONTACT_METHODS[data.contact];
 
   const text = [
-    `Nouvelle demande support A-F Marbre`,
-    ``,
-    `Référence: ${ticket}`,
-    `Type: ${typeLabel}`,
-    `Nom: ${data.name}`,
-    `E-mail: ${data.email}`,
-    `Téléphone: ${data.phone || "Non renseigné"}`,
-    `Préférence de contact: ${contactLabel}`,
-    `Référence devis/commande: ${data.reference || "Non renseignée"}`,
-    `Sujet: ${data.subject}`,
-    ``,
-    `Message:`,
+    "NOUVELLE DEMANDE — A-F MARBRE SUPPORT",
+    "",
+    `Référence : ${ticket}`,
+    `Type : ${typeLabel}`,
+    `Nom : ${data.name}`,
+    `E-mail : ${data.email}`,
+    `Téléphone : ${data.phone || "Non renseigné"}`,
+    `Contact préféré : ${contactLabel}`,
+    `Réf. devis / commande : ${data.reference || "Non renseignée"}`,
+    `Sujet : ${data.subject}`,
+    "",
+    "MESSAGE",
     data.message,
-    ``,
-    `IP: ${request.headers.get("CF-Connecting-IP") || "Non disponible"}`,
+    "",
+    `IP : ${request.headers.get("CF-Connecting-IP") || "Non disponible"}`,
   ].join("\n");
 
   const html = `
-    <div style="font-family:Arial,sans-serif;max-width:680px;margin:auto;color:#202020">
-      <h2 style="margin-bottom:6px">Nouvelle demande support A-F Marbre</h2>
-      <p style="margin-top:0;color:#666">Référence <strong>${escapeHtml(ticket)}</strong></p>
-      <table cellpadding="8" cellspacing="0" style="width:100%;border-collapse:collapse">
-        ${emailRow("Type", typeLabel)}
-        ${emailRow("Nom", data.name)}
-        ${emailRow("E-mail", data.email)}
-        ${emailRow("Téléphone", data.phone || "Non renseigné")}
-        ${emailRow("Préférence", contactLabel)}
-        ${emailRow("Réf. devis/commande", data.reference || "Non renseignée")}
-        ${emailRow("Sujet", data.subject)}
-      </table>
-      <div style="margin-top:18px;padding:16px;background:#f6f3ed;border-radius:10px">
-        <strong>Message</strong>
-        <p style="white-space:pre-wrap">${escapeHtml(data.message)}</p>
+  <div style="margin:0;background:#f3f0ea;padding:32px 16px;font-family:Arial,sans-serif;color:#171717">
+    <div style="max-width:680px;margin:auto;background:#fff;border:1px solid #ded8ce">
+      <div style="padding:28px 30px;background:#191817;color:#fff">
+        <div style="font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:#c8ad85">A-F Marbre</div>
+        <h1 style="margin:8px 0 0;font-family:Georgia,serif;font-size:28px;font-weight:normal">Nouvelle demande support</h1>
       </div>
-    </div>`;
+      <div style="padding:28px 30px">
+        <p style="margin-top:0;color:#6c665e">Référence <strong style="color:#171717">${escapeHtml(ticket)}</strong></p>
+        <table cellpadding="9" cellspacing="0" style="width:100%;border-collapse:collapse">
+          ${emailRow("Type", typeLabel)}
+          ${emailRow("Nom", data.name)}
+          ${emailRow("E-mail", data.email)}
+          ${emailRow("Téléphone", data.phone || "Non renseigné")}
+          ${emailRow("Préférence", contactLabel)}
+          ${emailRow("Réf. devis / commande", data.reference || "Non renseignée")}
+          ${emailRow("Sujet", data.subject)}
+        </table>
+        <div style="margin-top:22px;padding:18px;background:#f5f2ec;border-left:3px solid #a88355">
+          <strong>Message</strong>
+          <p style="white-space:pre-wrap;line-height:1.6">${escapeHtml(data.message)}</p>
+        </div>
+      </div>
+    </div>
+  </div>`;
 
   try {
     await env.EMAIL.send({
@@ -184,13 +206,13 @@ async function handleSupportRequest(request, env) {
     return htmlResponse(
       renderPage(env, {
         errorMessage:
-          "Nous n’avons pas pu envoyer votre demande pour le moment. Merci d’utiliser WhatsApp ou de réessayer plus tard.",
+          "Votre demande n’a pas pu être envoyée pour le moment. Merci d’utiliser WhatsApp ou de réessayer plus tard.",
       }),
       502
     );
   }
 
-  const redirectUrl = new URL(SUPPORT_PATH, request.url);
+  const redirectUrl = new URL("/", request.url);
   redirectUrl.searchParams.set("success", "1");
   redirectUrl.searchParams.set("ticket", ticket);
   return Response.redirect(redirectUrl.toString(), 303);
@@ -215,6 +237,7 @@ async function verifyTurnstile(request, env, token) {
         body,
       }
     );
+
     if (!response.ok) return { ok: false };
     result = await response.json();
   } catch (error) {
@@ -225,7 +248,7 @@ async function verifyTurnstile(request, env, token) {
   const hostnames = new Set(
     String(env.TURNSTILE_HOSTNAMES || "")
       .split(",")
-      .map((v) => v.trim().toLowerCase())
+      .map((value) => value.trim().toLowerCase())
       .filter(Boolean)
   );
 
@@ -246,27 +269,38 @@ function validateRequest(data) {
   if (data.name.length < 2 || data.name.length > 100) {
     return "Veuillez saisir votre nom complet.";
   }
-  if (data.email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(data.email)) {
+
+  if (
+    data.email.length > 254 ||
+    !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(data.email)
+  ) {
     return "Veuillez saisir une adresse e-mail valide.";
   }
+
   if (data.phone.length > 40) {
     return "Le numéro de téléphone est trop long.";
   }
+
   if (data.reference.length > 80) {
-    return "La référence devis/commande est trop longue.";
+    return "La référence devis / commande est trop longue.";
   }
+
   if (!Object.hasOwn(REQUEST_TYPES, data.type)) {
     return "Veuillez sélectionner un type de demande.";
   }
+
   if (!Object.hasOwn(CONTACT_METHODS, data.contact)) {
     return "Veuillez sélectionner votre moyen de contact préféré.";
   }
+
   if (data.subject.length < 3 || data.subject.length > 160) {
     return "Le sujet doit contenir entre 3 et 160 caractères.";
   }
+
   if (data.message.length < 10 || data.message.length > 5000) {
     return "Le message doit contenir entre 10 et 5000 caractères.";
   }
+
   return "";
 }
 
@@ -281,295 +315,1201 @@ function renderPage(env, { successMessage = "", errorMessage = "" } = {}) {
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Support | A-F Marbre</title>
-  <meta name="description" content="Centre d’assistance A-F Marbre : devis, commande, livraison, pose, SAV, entretien et facturation.">
-  <meta name="robots" content="index,follow">
+  <meta name="theme-color" content="#181715">
+  <title>Support client | A-F Marbre</title>
+  <meta name="description" content="Assistance A-F Marbre pour vos devis, commandes, livraisons, poses, travaux d’entretien, cristallisation et demandes SAV.">
+  <link rel="canonical" href="https://support.afmarbre.com/">
   <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
   <style>
-    :root{
-      --ink:#171717;
-      --muted:#6b675f;
-      --paper:#f6f3ed;
-      --surface:#ffffff;
-      --line:#ddd7cc;
-      --accent:#9b7747;
-      --accent-dark:#76562f;
-      --soft:#eee8dc;
-      --success:#e8f3e9;
-      --success-ink:#285b31;
-      --error:#fae9e7;
-      --error-ink:#862f26;
-      --radius:22px;
-      --shadow:0 18px 50px rgba(26,22,17,.08);
+    :root {
+      --ink: #181715;
+      --ink-soft: #272522;
+      --paper: #f5f2ec;
+      --paper-deep: #ece6dd;
+      --surface: #fffdf9;
+      --surface-2: #f9f6f1;
+      --line: #dcd4c9;
+      --line-dark: rgba(255,255,255,.17);
+      --muted: #716b62;
+      --stone: #a78255;
+      --stone-deep: #7a5b38;
+      --stone-light: #d4bea0;
+      --success: #e9f2e9;
+      --success-ink: #285632;
+      --error: #f8e9e6;
+      --error-ink: #842f27;
+      --shadow: 0 26px 70px rgba(32, 27, 21, .11);
+      --shadow-soft: 0 12px 35px rgba(32, 27, 21, .07);
     }
-    *{box-sizing:border-box}
-    html{scroll-behavior:smooth}
-    body{
-      margin:0;
-      color:var(--ink);
+
+    * { box-sizing: border-box; }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      margin: 0;
+      color: var(--ink);
       background:
-        radial-gradient(circle at 20% 10%,rgba(155,119,71,.09),transparent 24rem),
-        radial-gradient(circle at 80% 35%,rgba(120,120,120,.07),transparent 22rem),
-        linear-gradient(135deg,#faf8f4,#f1eee8);
-      font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
-      line-height:1.55;
+        linear-gradient(rgba(102, 85, 64, .035) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(102, 85, 64, .035) 1px, transparent 1px),
+        var(--paper);
+      background-size: 48px 48px;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      line-height: 1.55;
+      -webkit-font-smoothing: antialiased;
     }
-    a{color:inherit}
-    .wrap{width:min(1160px,calc(100% - 32px));margin:auto}
-    header{
-      position:sticky;top:0;z-index:20;
-      background:rgba(250,248,244,.88);
-      backdrop-filter:blur(14px);
-      border-bottom:1px solid rgba(120,110,95,.14);
+
+    a { color: inherit; }
+
+    .shell {
+      width: min(1180px, calc(100% - 40px));
+      margin: 0 auto;
     }
-    .nav{height:76px;display:flex;align-items:center;justify-content:space-between;gap:18px}
-    .brand{display:flex;align-items:center;gap:12px;text-decoration:none}
-    .mark{
-      width:42px;height:42px;border:1px solid var(--ink);border-radius:50%;
-      display:grid;place-items:center;font-family:Georgia,serif;font-size:18px;letter-spacing:-1px;
-      background:linear-gradient(145deg,#fff,#e9e2d6);
+
+    .topbar {
+      background: var(--ink);
+      color: #e8e2d9;
+      font-size: 12px;
     }
-    .brand strong{display:block;font-family:Georgia,serif;font-size:20px;letter-spacing:.02em}
-    .brand small{display:block;color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.14em}
-    .navlinks{display:flex;align-items:center;gap:12px}
-    .navlinks a{font-size:14px;text-decoration:none;padding:10px 12px;border-radius:999px}
-    .navlinks a:hover{background:var(--soft)}
-    .status-link{border:1px solid var(--line)}
-    .dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:#4f8b59;margin-right:7px}
-    .hero{padding:74px 0 42px}
-    .eyebrow{color:var(--accent-dark);font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.18em}
-    h1{
-      max-width:780px;margin:12px 0 18px;
-      font-family:Georgia,"Times New Roman",serif;
-      font-size:clamp(42px,7vw,76px);line-height:.98;font-weight:500;letter-spacing:-.045em;
+
+    .topbar-inner {
+      min-height: 34px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 18px;
     }
-    .lead{max-width:710px;color:var(--muted);font-size:18px}
-    .quick-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin:30px 0 0}
-    .quick{
-      min-height:145px;padding:22px;border:1px solid var(--line);border-radius:18px;
-      background:rgba(255,255,255,.7);text-decoration:none;transition:.2s ease;
+
+    .topbar a {
+      text-decoration: none;
+      color: #fff;
     }
-    .quick:hover{transform:translateY(-2px);box-shadow:var(--shadow)}
-    .quick .icon{font-size:22px}
-    .quick strong{display:block;margin-top:20px;font-size:16px}
-    .quick span{display:block;color:var(--muted);font-size:13px;margin-top:3px}
-    main{padding:18px 0 80px}
-    .layout{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(300px,.75fr);gap:24px;align-items:start}
-    .card{background:rgba(255,255,255,.91);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow)}
-    .form-card{padding:34px}
-    .form-card h2,.side-card h2{font-family:Georgia,serif;font-size:30px;font-weight:500;margin:0 0 8px}
-    .form-card .intro{margin:0 0 26px;color:var(--muted)}
-    .notice{padding:14px 16px;border-radius:14px;margin:0 0 22px;font-size:14px}
-    .notice.success{background:var(--success);color:var(--success-ink)}
-    .notice.error{background:var(--error);color:var(--error-ink)}
-    form{display:grid;gap:17px}
-    .row{display:grid;grid-template-columns:1fr 1fr;gap:15px}
-    label{display:block;font-size:13px;font-weight:750;margin-bottom:7px}
-    input,select,textarea{
-      width:100%;border:1px solid var(--line);border-radius:12px;background:#fff;
-      color:var(--ink);font:inherit;padding:13px 14px;outline:none;
-      transition:border-color .15s,box-shadow .15s;
+
+    .topbar a:hover { text-decoration: underline; }
+
+    header {
+      position: sticky;
+      top: 0;
+      z-index: 30;
+      border-bottom: 1px solid rgba(84, 72, 57, .14);
+      background: rgba(245, 242, 236, .9);
+      backdrop-filter: blur(18px);
     }
-    input:focus,select:focus,textarea:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(155,119,71,.13)}
-    textarea{min-height:150px;resize:vertical}
-    .help{font-size:12px;color:var(--muted);margin-top:6px}
-    .trap{position:absolute;left:-9999px;opacity:0;pointer-events:none}
-    .turnstile-box{min-height:68px;display:flex;align-items:center}
-    button{
-      border:0;border-radius:999px;background:var(--ink);color:#fff;
-      padding:14px 22px;font:inherit;font-weight:800;cursor:pointer;justify-self:start;
+
+    .nav {
+      min-height: 80px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 24px;
     }
-    button:hover{background:#2c2b29}
-    .privacy{font-size:12px;color:var(--muted);margin:0}
-    .side{display:grid;gap:18px}
-    .side-card{padding:25px}
-    .contact-list{display:grid;gap:15px;margin-top:20px}
-    .contact{padding-top:14px;border-top:1px solid var(--line)}
-    .contact:first-child{border-top:0;padding-top:0}
-    .contact b{display:block;font-size:13px;margin-bottom:3px}
-    .contact span,.contact a{font-size:14px;color:var(--muted);text-decoration:none}
-    .contact a:hover{text-decoration:underline}
-    .whatsapp{
-      display:flex;align-items:center;justify-content:center;text-align:center;
-      margin-top:20px;padding:13px 16px;border-radius:999px;background:var(--soft);
-      text-decoration:none;font-weight:800;font-size:14px;
+
+    .brand {
+      display: inline-flex;
+      align-items: center;
+      gap: 15px;
+      text-decoration: none;
     }
-    .topics{display:grid;gap:10px;margin-top:18px}
-    .topic{display:flex;gap:10px;align-items:flex-start;font-size:14px;color:var(--muted)}
-    .topic i{width:22px;height:22px;border-radius:50%;background:var(--soft);display:grid;place-items:center;color:var(--accent-dark);font-style:normal;font-size:12px;flex:0 0 auto}
-    footer{border-top:1px solid var(--line);padding:28px 0 45px;color:var(--muted);font-size:13px}
-    footer .wrap{display:flex;justify-content:space-between;gap:18px;flex-wrap:wrap}
-    @media (max-width:850px){
-      .layout{grid-template-columns:1fr}
-      .quick-grid{grid-template-columns:1fr}
-      .quick{min-height:unset}
-      .navlinks a:not(.status-link){display:none}
+
+    .brand-mark {
+      width: 46px;
+      height: 46px;
+      display: grid;
+      place-items: center;
+      border: 1px solid #a59786;
+      background:
+        linear-gradient(135deg, rgba(255,255,255,.96), rgba(227,219,208,.9));
+      font-family: Georgia, "Times New Roman", serif;
+      font-size: 17px;
+      letter-spacing: -.08em;
+      box-shadow: inset 0 0 0 5px rgba(255,255,255,.34);
     }
-    @media (max-width:620px){
-      .hero{padding-top:48px}
-      .row{grid-template-columns:1fr}
-      .form-card{padding:22px}
-      .side-card{padding:22px}
-      h1{font-size:46px}
+
+    .brand-copy strong {
+      display: block;
+      font-family: Georgia, "Times New Roman", serif;
+      font-size: 21px;
+      font-weight: 500;
+      letter-spacing: .02em;
+    }
+
+    .brand-copy small {
+      display: block;
+      margin-top: 1px;
+      color: var(--muted);
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: .18em;
+    }
+
+    .nav-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .nav-link,
+    .nav-button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 42px;
+      padding: 0 15px;
+      text-decoration: none;
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    .nav-link { color: #4e4942; }
+
+    .nav-link:hover { color: var(--ink); }
+
+    .nav-button {
+      border: 1px solid var(--ink);
+      background: var(--ink);
+      color: #fff;
+    }
+
+    .hero {
+      padding: 44px 0 36px;
+    }
+
+    .hero-frame {
+      position: relative;
+      min-height: 580px;
+      overflow: hidden;
+      background: var(--ink);
+      box-shadow: var(--shadow);
+    }
+
+    .hero-frame::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background:
+        linear-gradient(90deg, rgba(18,17,15,.96) 0%, rgba(18,17,15,.87) 36%, rgba(18,17,15,.2) 69%, rgba(18,17,15,.12) 100%),
+        linear-gradient(0deg, rgba(18,17,15,.32), transparent 60%);
+      z-index: 1;
+    }
+
+    .hero-image {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      object-position: center;
+      opacity: .92;
+    }
+
+    .hero-content {
+      position: relative;
+      z-index: 2;
+      width: min(650px, 66%);
+      min-height: 580px;
+      padding: 74px 68px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      color: #fff;
+    }
+
+    .kicker {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 20px;
+      color: var(--stone-light);
+      font-size: 11px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: .2em;
+    }
+
+    .kicker::before {
+      content: "";
+      width: 42px;
+      height: 1px;
+      background: currentColor;
+    }
+
+    .hero h1 {
+      max-width: 620px;
+      margin: 0;
+      font-family: Georgia, "Times New Roman", serif;
+      font-size: clamp(48px, 6.6vw, 82px);
+      line-height: .98;
+      font-weight: 400;
+      letter-spacing: -.045em;
+    }
+
+    .hero-lead {
+      max-width: 560px;
+      margin: 26px 0 0;
+      color: #ddd5ca;
+      font-size: 17px;
+      line-height: 1.7;
+    }
+
+    .hero-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 34px;
+    }
+
+    .button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 48px;
+      padding: 0 19px;
+      border: 1px solid transparent;
+      text-decoration: none;
+      font-size: 13px;
+      font-weight: 800;
+      transition: transform .16s ease, background .16s ease, border-color .16s ease;
+    }
+
+    .button:hover { transform: translateY(-1px); }
+
+    .button-light {
+      background: #fff;
+      color: var(--ink);
+    }
+
+    .button-ghost {
+      border-color: rgba(255,255,255,.4);
+      color: #fff;
+      background: rgba(255,255,255,.04);
+    }
+
+    .hero-note {
+      position: absolute;
+      right: 30px;
+      bottom: 28px;
+      z-index: 3;
+      width: 230px;
+      padding: 17px 18px;
+      border: 1px solid rgba(255,255,255,.25);
+      background: rgba(19,18,16,.68);
+      backdrop-filter: blur(12px);
+      color: #fff;
+    }
+
+    .hero-note span {
+      display: block;
+      color: #c7bdaf;
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: .16em;
+    }
+
+    .hero-note strong {
+      display: block;
+      margin-top: 5px;
+      font-family: Georgia, serif;
+      font-size: 20px;
+      font-weight: 400;
+    }
+
+    .contact-strip {
+      display: grid;
+      grid-template-columns: 1.2fr 1fr 1fr 1.15fr;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      box-shadow: var(--shadow-soft);
+      margin-bottom: 74px;
+    }
+
+    .contact-item {
+      min-height: 112px;
+      padding: 24px 25px;
+      border-right: 1px solid var(--line);
+      text-decoration: none;
+    }
+
+    .contact-item:last-child { border-right: 0; }
+
+    .contact-item .label {
+      display: block;
+      color: var(--muted);
+      font-size: 10px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: .16em;
+    }
+
+    .contact-item strong {
+      display: block;
+      margin-top: 8px;
+      font-family: Georgia, serif;
+      font-size: 19px;
+      font-weight: 400;
+      line-height: 1.25;
+    }
+
+    a.contact-item:hover strong { color: var(--stone-deep); }
+
+    .section {
+      padding: 0 0 88px;
+    }
+
+    .section-head {
+      max-width: 710px;
+      margin-bottom: 30px;
+    }
+
+    .section-head .eyebrow {
+      color: var(--stone-deep);
+      font-size: 11px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: .18em;
+    }
+
+    .section-head h2 {
+      margin: 9px 0 12px;
+      font-family: Georgia, "Times New Roman", serif;
+      font-size: clamp(34px, 4.5vw, 52px);
+      line-height: 1.05;
+      font-weight: 400;
+      letter-spacing: -.035em;
+    }
+
+    .section-head p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 16px;
+    }
+
+    .support-layout {
+      display: grid;
+      grid-template-columns: minmax(0, 1.55fr) minmax(300px, .72fr);
+      gap: 24px;
+      align-items: start;
+    }
+
+    .card {
+      border: 1px solid var(--line);
+      background: var(--surface);
+      box-shadow: var(--shadow-soft);
+    }
+
+    .form-card { padding: 38px; }
+
+    .form-top {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 25px;
+      margin-bottom: 30px;
+      padding-bottom: 24px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .form-top h3 {
+      margin: 0;
+      font-family: Georgia, serif;
+      font-size: 30px;
+      font-weight: 400;
+    }
+
+    .form-top p {
+      max-width: 470px;
+      margin: 8px 0 0;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .secure-badge {
+      flex: 0 0 auto;
+      padding: 8px 10px;
+      border: 1px solid #d8d0c4;
+      background: var(--surface-2);
+      color: #5f584f;
+      font-size: 10px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: .12em;
+    }
+
+    .notice {
+      padding: 15px 17px;
+      margin: 0 0 22px;
+      font-size: 14px;
+      border-left: 3px solid currentColor;
+    }
+
+    .notice.success {
+      color: var(--success-ink);
+      background: var(--success);
+    }
+
+    .notice.error {
+      color: var(--error-ink);
+      background: var(--error);
+    }
+
+    form {
+      display: grid;
+      gap: 18px;
+    }
+
+    .row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+    }
+
+    label {
+      display: block;
+      margin-bottom: 7px;
+      font-size: 12px;
+      font-weight: 800;
+      letter-spacing: .01em;
+    }
+
+    input,
+    select,
+    textarea {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 0;
+      background: #fff;
+      color: var(--ink);
+      font: inherit;
+      padding: 13px 14px;
+      outline: none;
+      transition: border-color .15s ease, box-shadow .15s ease;
+    }
+
+    input:focus,
+    select:focus,
+    textarea:focus {
+      border-color: var(--stone);
+      box-shadow: 0 0 0 3px rgba(167, 130, 85, .12);
+    }
+
+    textarea {
+      min-height: 160px;
+      resize: vertical;
+    }
+
+    .field-help {
+      margin-top: 6px;
+      color: var(--muted);
+      font-size: 11px;
+    }
+
+    .trap {
+      position: absolute;
+      left: -9999px;
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .turnstile {
+      min-height: 66px;
+      display: flex;
+      align-items: center;
+    }
+
+    .submit-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 18px;
+      padding-top: 3px;
+    }
+
+    button[type="submit"] {
+      min-height: 50px;
+      padding: 0 23px;
+      border: 1px solid var(--ink);
+      background: var(--ink);
+      color: #fff;
+      font: inherit;
+      font-size: 13px;
+      font-weight: 800;
+      cursor: pointer;
+    }
+
+    button[type="submit"]:hover { background: #2a2825; }
+
+    .privacy {
+      max-width: 390px;
+      margin: 0;
+      color: var(--muted);
+      font-size: 11px;
+      text-align: right;
+    }
+
+    .side {
+      display: grid;
+      gap: 20px;
+    }
+
+    .side-card { padding: 28px; }
+
+    .side-card.dark {
+      background: var(--ink);
+      color: #fff;
+      border-color: var(--ink);
+    }
+
+    .side-card h3 {
+      margin: 0;
+      font-family: Georgia, serif;
+      font-size: 28px;
+      font-weight: 400;
+    }
+
+    .side-card > p {
+      margin: 9px 0 0;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .side-card.dark > p { color: #bdb4a8; }
+
+    .support-list {
+      display: grid;
+      gap: 0;
+      margin-top: 23px;
+    }
+
+    .support-line {
+      padding: 16px 0;
+      border-top: 1px solid var(--line);
+    }
+
+    .side-card.dark .support-line { border-color: var(--line-dark); }
+
+    .support-line span {
+      display: block;
+      color: var(--muted);
+      font-size: 10px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: .13em;
+    }
+
+    .side-card.dark .support-line span { color: #a89f94; }
+
+    .support-line strong,
+    .support-line a {
+      display: block;
+      margin-top: 4px;
+      text-decoration: none;
+      font-size: 14px;
+      font-weight: 600;
+    }
+
+    .side-card.dark .support-line a:hover { color: var(--stone-light); }
+
+    .wa-button {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 48px;
+      margin-top: 21px;
+      border: 1px solid #fff;
+      color: #fff;
+      text-decoration: none;
+      font-size: 13px;
+      font-weight: 800;
+    }
+
+    .wa-button:hover {
+      background: #fff;
+      color: var(--ink);
+    }
+
+    .mini-links {
+      display: grid;
+      margin-top: 20px;
+    }
+
+    .mini-links a {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 13px 0;
+      border-top: 1px solid var(--line);
+      text-decoration: none;
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    .mini-links a::after {
+      content: "↗";
+      color: var(--stone-deep);
+    }
+
+    .services {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      border: 1px solid var(--line);
+      background: var(--surface);
+    }
+
+    .service {
+      min-height: 220px;
+      padding: 29px;
+      border-right: 1px solid var(--line);
+    }
+
+    .service:last-child { border-right: 0; }
+
+    .service .num {
+      color: var(--stone);
+      font-family: Georgia, serif;
+      font-size: 16px;
+    }
+
+    .service h3 {
+      margin: 48px 0 9px;
+      font-family: Georgia, serif;
+      font-size: 25px;
+      font-weight: 400;
+    }
+
+    .service p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .faq-grid {
+      display: grid;
+      grid-template-columns: .72fr 1.28fr;
+      gap: 50px;
+      align-items: start;
+    }
+
+    .faq-title h2 {
+      margin: 8px 0 12px;
+      font-family: Georgia, serif;
+      font-size: 42px;
+      font-weight: 400;
+      line-height: 1.05;
+    }
+
+    .faq-title p {
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .faq {
+      border-top: 1px solid var(--line);
+    }
+
+    details {
+      border-bottom: 1px solid var(--line);
+    }
+
+    summary {
+      position: relative;
+      padding: 21px 42px 21px 0;
+      cursor: pointer;
+      list-style: none;
+      font-size: 15px;
+      font-weight: 750;
+    }
+
+    summary::-webkit-details-marker { display: none; }
+
+    summary::after {
+      content: "+";
+      position: absolute;
+      right: 2px;
+      top: 17px;
+      color: var(--stone-deep);
+      font-family: Georgia, serif;
+      font-size: 24px;
+      font-weight: 400;
+    }
+
+    details[open] summary::after { content: "−"; }
+
+    details p {
+      max-width: 690px;
+      margin: -4px 0 21px;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.7;
+    }
+
+    footer {
+      background: var(--ink);
+      color: #cec6bb;
+      padding: 44px 0 36px;
+    }
+
+    .footer-grid {
+      display: grid;
+      grid-template-columns: 1.3fr 1fr 1fr;
+      gap: 40px;
+    }
+
+    .footer-brand strong {
+      display: block;
+      color: #fff;
+      font-family: Georgia, serif;
+      font-size: 25px;
+      font-weight: 400;
+    }
+
+    .footer-brand p {
+      max-width: 410px;
+      margin: 11px 0 0;
+      color: #a99f92;
+      font-size: 13px;
+    }
+
+    .footer-col span {
+      display: block;
+      margin-bottom: 12px;
+      color: #8f867a;
+      font-size: 10px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: .16em;
+    }
+
+    .footer-col a {
+      display: block;
+      width: fit-content;
+      margin: 6px 0;
+      color: #e5ded5;
+      text-decoration: none;
+      font-size: 13px;
+    }
+
+    .footer-col a:hover { color: #fff; }
+
+    .footer-bottom {
+      display: flex;
+      justify-content: space-between;
+      gap: 20px;
+      margin-top: 38px;
+      padding-top: 22px;
+      border-top: 1px solid var(--line-dark);
+      color: #81786d;
+      font-size: 11px;
+    }
+
+    @media (max-width: 940px) {
+      .hero-content {
+        width: 76%;
+        padding: 62px 46px;
+      }
+
+      .contact-strip { grid-template-columns: 1fr 1fr; }
+      .contact-item:nth-child(2) { border-right: 0; }
+      .contact-item:nth-child(-n+2) { border-bottom: 1px solid var(--line); }
+
+      .support-layout { grid-template-columns: 1fr; }
+      .side { grid-template-columns: 1fr 1fr; }
+
+      .faq-grid { grid-template-columns: 1fr; gap: 20px; }
+    }
+
+    @media (max-width: 720px) {
+      .shell { width: min(100% - 24px, 1180px); }
+
+      .topbar-inner {
+        min-height: 38px;
+        justify-content: center;
+      }
+
+      .topbar-inner span:last-child { display: none; }
+
+      .nav { min-height: 70px; }
+      .brand-mark { width: 40px; height: 40px; }
+      .brand-copy strong { font-size: 18px; }
+      .nav-link { display: none; }
+      .nav-button { min-height: 40px; padding: 0 12px; }
+
+      .hero { padding-top: 20px; }
+      .hero-frame { min-height: 650px; }
+      .hero-frame::after {
+        background:
+          linear-gradient(0deg, rgba(18,17,15,.97) 0%, rgba(18,17,15,.83) 53%, rgba(18,17,15,.22) 100%);
+      }
+      .hero-image {
+        height: 49%;
+        object-position: center;
+      }
+      .hero-content {
+        width: 100%;
+        min-height: 650px;
+        padding: 290px 25px 38px;
+        justify-content: flex-end;
+      }
+      .hero h1 { font-size: clamp(45px, 14vw, 64px); }
+      .hero-lead { font-size: 15px; }
+      .hero-note { display: none; }
+
+      .contact-strip {
+        grid-template-columns: 1fr;
+        margin-bottom: 60px;
+      }
+      .contact-item,
+      .contact-item:nth-child(2) {
+        min-height: 92px;
+        border-right: 0;
+        border-bottom: 1px solid var(--line);
+      }
+      .contact-item:last-child { border-bottom: 0; }
+
+      .form-card { padding: 24px 20px; }
+      .form-top { display: block; }
+      .secure-badge { width: fit-content; margin-top: 16px; }
+
+      .row { grid-template-columns: 1fr; }
+      .submit-row { align-items: stretch; flex-direction: column; }
+      .privacy { text-align: left; }
+
+      .side { grid-template-columns: 1fr; }
+
+      .services { grid-template-columns: 1fr; }
+      .service {
+        min-height: auto;
+        border-right: 0;
+        border-bottom: 1px solid var(--line);
+      }
+      .service:last-child { border-bottom: 0; }
+      .service h3 { margin-top: 25px; }
+
+      .footer-grid { grid-template-columns: 1fr; gap: 28px; }
+      .footer-bottom { flex-direction: column; }
     }
   </style>
 </head>
 <body>
-<header>
-  <div class="wrap nav">
-    <a class="brand" href="https://afmarbre.com/">
-      <span class="mark">A·F</span>
-      <span><strong>A-F Marbre</strong><small>L’art du marbre</small></span>
-    </a>
-    <nav class="navlinks" aria-label="Navigation principale">
-      <a href="https://afmarbre.com/">Accueil</a>
-      <a href="https://afmarbre.com/contact/">Contact</a>
-      <a class="status-link" href="https://status.afmarbre.com/" target="_blank" rel="noopener"><span class="dot"></span>État des services</a>
-    </nav>
-  </div>
-</header>
-
-<section class="hero">
-  <div class="wrap">
-    <div class="eyebrow">Centre d’assistance</div>
-    <h1>Comment pouvons-nous vous aider&nbsp;?</h1>
-    <p class="lead">Une question sur un devis, une commande, la pose, l’entretien ou le service après-vente ? Envoyez votre demande à l’équipe A-F Marbre.</p>
-
-    <div class="quick-grid">
-      <a class="quick" href="#formulaire"><span class="icon">✦</span><strong>Ouvrir une demande</strong><span>Décrivez votre besoin et recevez une référence.</span></a>
-      <a class="quick" href="https://wa.me/212661959239" target="_blank" rel="noopener"><span class="icon">◌</span><strong>WhatsApp</strong><span>06 61 95 92 39</span></a>
-      <a class="quick" href="tel:+212522969736"><span class="icon">☎</span><strong>Nous appeler</strong><span>05 22 96 97 36</span></a>
+  <div class="topbar">
+    <div class="shell topbar-inner">
+      <span>A-F Marbre — Fourniture & pose · Maroc</span>
+      <span>Besoin d’une réponse rapide ? <a href="https://wa.me/212661959239" target="_blank" rel="noopener">WhatsApp 06 61 95 92 39</a></span>
     </div>
   </div>
-</section>
 
-<main>
-  <div class="wrap layout">
-    <section class="card form-card" id="formulaire">
-      <h2>Envoyer une demande</h2>
-      <p class="intro">Plus votre demande est précise, plus notre équipe pourra vous répondre rapidement.</p>
+  <header>
+    <div class="shell nav">
+      <a class="brand" href="https://afmarbre.com/" aria-label="A-F Marbre — Accueil">
+        <span class="brand-mark">A·F</span>
+        <span class="brand-copy">
+          <strong>A-F Marbre</strong>
+          <small>Centre d’assistance</small>
+        </span>
+      </a>
 
-      ${successMessage ? `<div class="notice success" role="status">${escapeHtml(successMessage)}</div>` : ""}
-      ${errorMessage ? `<div class="notice error" role="alert">${escapeHtml(errorMessage)}</div>` : ""}
+      <nav class="nav-actions" aria-label="Navigation">
+        <a class="nav-link" href="https://afmarbre.com/">Site principal</a>
+        <a class="nav-link" href="https://status.afmarbre.com/" target="_blank" rel="noopener">État des services</a>
+        <a class="nav-button" href="#demande">Ouvrir une demande</a>
+      </nav>
+    </div>
+  </header>
 
-      <form method="post" action="${SUBMIT_PATH}">
-        <div class="row">
-          <div>
-            <label for="name">Nom complet *</label>
-            <input id="name" name="name" type="text" minlength="2" maxlength="100" autocomplete="name" required>
+  <main>
+    <section class="hero">
+      <div class="shell">
+        <div class="hero-frame">
+          <img class="hero-image" src="${BRAND_IMAGE}" alt="" fetchpriority="high">
+          <div class="hero-content">
+            <div class="kicker">Support A-F Marbre</div>
+            <h1>Votre projet mérite un suivi précis.</h1>
+            <p class="hero-lead">
+              Devis, commande, livraison, pose, SAV ou entretien : notre équipe vous accompagne avec la même exigence que celle apportée à nos réalisations en pierre naturelle.
+            </p>
+            <div class="hero-actions">
+              <a class="button button-light" href="#demande">Envoyer une demande</a>
+              <a class="button button-ghost" href="https://wa.me/212661959239" target="_blank" rel="noopener">Écrire sur WhatsApp</a>
+            </div>
           </div>
-          <div>
-            <label for="email">E-mail *</label>
-            <input id="email" name="email" type="email" maxlength="254" autocomplete="email" required>
-          </div>
-        </div>
-
-        <div class="row">
-          <div>
-            <label for="phone">Téléphone</label>
-            <input id="phone" name="phone" type="tel" maxlength="40" autocomplete="tel" placeholder="+212 …">
-          </div>
-          <div>
-            <label for="reference">Réf. devis / commande</label>
-            <input id="reference" name="reference" type="text" maxlength="80" placeholder="Ex. DEV-2026-0012">
-          </div>
-        </div>
-
-        <div class="row">
-          <div>
-            <label for="type">Type de demande *</label>
-            <select id="type" name="type" required>
-              <option value="">Choisir…</option>
-              <option value="devis">Devis / commande</option>
-              <option value="livraison">Livraison & pose</option>
-              <option value="sav">SAV / qualité</option>
-              <option value="entretien">Entretien du marbre</option>
-              <option value="facture">Facture / paiement</option>
-              <option value="autre">Autre demande</option>
-            </select>
-          </div>
-          <div>
-            <label for="contact">Contact préféré *</label>
-            <select id="contact" name="contact" required>
-              <option value="email">E-mail</option>
-              <option value="telephone">Téléphone</option>
-              <option value="whatsapp">WhatsApp</option>
-            </select>
+          <div class="hero-note">
+            <span>Spécialiste pierre naturelle</span>
+            <strong>Marbre · Granite<br>Onyx · Quartz</strong>
           </div>
         </div>
-
-        <div>
-          <label for="subject">Sujet *</label>
-          <input id="subject" name="subject" type="text" minlength="3" maxlength="160" required>
-        </div>
-
-        <div>
-          <label for="message">Votre message *</label>
-          <textarea id="message" name="message" minlength="10" maxlength="5000" required placeholder="Décrivez votre demande, le matériau concerné, la ville du projet et toute information utile."></textarea>
-          <div class="help">Pour des photos, vous pouvez aussi nous écrire sur WhatsApp.</div>
-        </div>
-
-        <div class="trap" aria-hidden="true">
-          <label for="website">Site web</label>
-          <input id="website" name="website" type="text" tabindex="-1" autocomplete="off">
-        </div>
-
-        <div class="turnstile-box">
-          ${siteKey
-            ? `<div class="cf-turnstile" data-sitekey="${escapeHtml(siteKey)}" data-action="${TURNSTILE_ACTION}" data-theme="light"></div>`
-            : `<span class="help">Turnstile doit être configuré avant la mise en production du formulaire.</span>`
-          }
-        </div>
-
-        <button type="submit">Envoyer ma demande</button>
-        <p class="privacy">Les informations envoyées via ce formulaire servent uniquement à traiter votre demande d’assistance.</p>
-      </form>
+      </div>
     </section>
 
-    <aside class="side">
-      <section class="card side-card">
-        <h2>Contact direct</h2>
-        <div class="contact-list">
-          <div class="contact">
-            <b>Showroom</b>
-            <a href="https://maps.app.goo.gl/oAFFAobrUDsu5sAE6" target="_blank" rel="noopener">Route Azemmour Km24 Berahma, Maroc</a>
-          </div>
-          <div class="contact">
-            <b>Téléphone fixe</b>
-            <a href="tel:+212522969736">05 22 96 97 36</a>
-          </div>
-          <div class="contact">
-            <b>Mobile / WhatsApp</b>
-            <a href="tel:+212661959239">06 61 95 92 39</a>
-          </div>
-          <div class="contact">
-            <b>Horaires</b>
-            <span>Lundi – Samedi<br>09:00 – 13:00<br>14:30 – 18:30</span>
-          </div>
+    <section class="shell">
+      <div class="contact-strip" aria-label="Contacts rapides">
+        <a class="contact-item" href="tel:+212522969736">
+          <span class="label">Téléphone</span>
+          <strong>05 22 96 97 36</strong>
+        </a>
+        <a class="contact-item" href="https://wa.me/212661959239" target="_blank" rel="noopener">
+          <span class="label">WhatsApp</span>
+          <strong>06 61 95 92 39</strong>
+        </a>
+        <div class="contact-item">
+          <span class="label">Horaires</span>
+          <strong>Lun. – Sam.<br>09:00 – 18:30</strong>
         </div>
-        <a class="whatsapp" href="https://wa.me/212661959239" target="_blank" rel="noopener">Contacter sur WhatsApp</a>
-      </section>
+        <a class="contact-item" href="https://maps.app.goo.gl/oAFFAobrUDsu5sAE6" target="_blank" rel="noopener">
+          <span class="label">Showroom</span>
+          <strong>Route Azemmour<br>Km24 Berahma</strong>
+        </a>
+      </div>
+    </section>
 
-      <section class="card side-card">
-        <h2>Nous pouvons vous aider pour</h2>
-        <div class="topics">
-          <div class="topic"><i>1</i><span>Suivi d’un devis ou d’une commande</span></div>
-          <div class="topic"><i>2</i><span>Questions sur la livraison ou la pose</span></div>
-          <div class="topic"><i>3</i><span>SAV, qualité ou finition</span></div>
-          <div class="topic"><i>4</i><span>Nettoyage, ponçage et cristallisation</span></div>
-          <div class="topic"><i>5</i><span>Facturation et informations administratives</span></div>
+    <section class="section" id="demande">
+      <div class="shell">
+        <div class="section-head">
+          <span class="eyebrow">Assistance personnalisée</span>
+          <h2>Parlez-nous de votre demande.</h2>
+          <p>
+            Indiquez votre référence de devis ou de commande si vous en avez une. Ces informations nous permettent d’identifier votre dossier plus facilement.
+          </p>
         </div>
-      </section>
-    </aside>
-  </div>
-</main>
 
-<footer>
-  <div class="wrap">
-    <span>© 2026 A-F Marbre — Fourniture & pose</span>
-    <span>Marbre · Granite · Onyx · Quartz · Travertin</span>
-  </div>
-</footer>
+        <div class="support-layout">
+          <section class="card form-card">
+            <div class="form-top">
+              <div>
+                <h3>Formulaire support</h3>
+                <p>Complétez les informations ci-dessous. Une référence unique sera créée après l’envoi.</p>
+              </div>
+              <div class="secure-badge">Protégé par Cloudflare</div>
+            </div>
+
+            ${successMessage ? `<div class="notice success" role="status">${escapeHtml(successMessage)}</div>` : ""}
+            ${errorMessage ? `<div class="notice error" role="alert">${escapeHtml(errorMessage)}</div>` : ""}
+
+            <form method="post" action="${SUBMIT_PATH}">
+              <div class="row">
+                <div>
+                  <label for="name">Nom complet *</label>
+                  <input id="name" name="name" type="text" minlength="2" maxlength="100" autocomplete="name" required>
+                </div>
+                <div>
+                  <label for="email">Adresse e-mail *</label>
+                  <input id="email" name="email" type="email" maxlength="254" autocomplete="email" required>
+                </div>
+              </div>
+
+              <div class="row">
+                <div>
+                  <label for="phone">Téléphone</label>
+                  <input id="phone" name="phone" type="tel" maxlength="40" autocomplete="tel" placeholder="+212 …">
+                </div>
+                <div>
+                  <label for="reference">Réf. devis / commande</label>
+                  <input id="reference" name="reference" type="text" maxlength="80" placeholder="Ex. DEV-2026-0012">
+                </div>
+              </div>
+
+              <div class="row">
+                <div>
+                  <label for="type">Nature de la demande *</label>
+                  <select id="type" name="type" required>
+                    <option value="">Sélectionner…</option>
+                    <option value="devis">Devis / commande</option>
+                    <option value="livraison">Livraison & pose</option>
+                    <option value="sav">SAV / qualité</option>
+                    <option value="entretien">Entretien / cristallisation</option>
+                    <option value="facture">Facture / paiement</option>
+                    <option value="autre">Autre demande</option>
+                  </select>
+                </div>
+                <div>
+                  <label for="contact">Contact préféré *</label>
+                  <select id="contact" name="contact" required>
+                    <option value="email">E-mail</option>
+                    <option value="telephone">Téléphone</option>
+                    <option value="whatsapp">WhatsApp</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label for="subject">Sujet *</label>
+                <input id="subject" name="subject" type="text" minlength="3" maxlength="160" placeholder="Résumez votre demande en une phrase" required>
+              </div>
+
+              <div>
+                <label for="message">Votre message *</label>
+                <textarea id="message" name="message" minlength="10" maxlength="5000" required placeholder="Décrivez votre projet ou votre demande : matériau concerné, dimensions, ville, étape du projet et toute information utile."></textarea>
+                <div class="field-help">Vous souhaitez joindre des photos ? Envoyez-les directement à notre équipe via WhatsApp.</div>
+              </div>
+
+              <div class="trap" aria-hidden="true">
+                <label for="website">Site web</label>
+                <input id="website" name="website" type="text" tabindex="-1" autocomplete="off">
+              </div>
+
+              <div class="turnstile">
+                ${
+                  siteKey
+                    ? `<div class="cf-turnstile" data-sitekey="${escapeHtml(siteKey)}" data-action="${TURNSTILE_ACTION}" data-theme="light"></div>`
+                    : `<span class="field-help">Turnstile doit être configuré avant la mise en production du formulaire.</span>`
+                }
+              </div>
+
+              <div class="submit-row">
+                <button type="submit">Transmettre ma demande</button>
+                <p class="privacy">Vos informations sont utilisées uniquement pour le traitement de votre demande d’assistance.</p>
+              </div>
+            </form>
+          </section>
+
+          <aside class="side">
+            <section class="card side-card dark">
+              <h3>Besoin d’un échange direct ?</h3>
+              <p>Notre équipe est joignable du lundi au samedi pour vos demandes liées à vos projets en marbre et pierre naturelle.</p>
+
+              <div class="support-list">
+                <div class="support-line">
+                  <span>Fixe</span>
+                  <a href="tel:+212522969736">05 22 96 97 36</a>
+                </div>
+                <div class="support-line">
+                  <span>Mobile / WhatsApp</span>
+                  <a href="tel:+212661959239">06 61 95 92 39</a>
+                </div>
+                <div class="support-line">
+                  <span>Showroom</span>
+                  <a href="https://maps.app.goo.gl/oAFFAobrUDsu5sAE6" target="_blank" rel="noopener">Route Azemmour Km24 Berahma, Maroc</a>
+                </div>
+                <div class="support-line">
+                  <span>Ouverture</span>
+                  <strong>Lundi – Samedi<br>09:00 – 13:00 · 14:30 – 18:30</strong>
+                </div>
+              </div>
+
+              <a class="wa-button" href="https://wa.me/212661959239" target="_blank" rel="noopener">Ouvrir WhatsApp</a>
+            </section>
+
+            <section class="card side-card">
+              <h3>Liens utiles</h3>
+              <p>Accédez rapidement aux services A-F Marbre.</p>
+              <div class="mini-links">
+                <a href="https://afmarbre.com/" target="_blank" rel="noopener">Retour au site A-F Marbre</a>
+                <a href="https://afmarbre.com/contact/" target="_blank" rel="noopener">Page contact</a>
+                <a href="https://status.afmarbre.com/" target="_blank" rel="noopener">État des services</a>
+              </div>
+            </section>
+          </aside>
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="shell">
+        <div class="section-head">
+          <span class="eyebrow">Votre demande, au bon service</span>
+          <h2>Un point de contact pour tout votre projet.</h2>
+        </div>
+
+        <div class="services">
+          <article class="service">
+            <span class="num">01</span>
+            <h3>Avant le projet</h3>
+            <p>Questions sur les matériaux, disponibilité, choix de pierre, devis et préparation d’une commande.</p>
+          </article>
+          <article class="service">
+            <span class="num">02</span>
+            <h3>Pendant la réalisation</h3>
+            <p>Suivi de commande, coordination de livraison, informations liées à la pose et au chantier.</p>
+          </article>
+          <article class="service">
+            <span class="num">03</span>
+            <h3>Après la pose</h3>
+            <p>SAV, conseils d’entretien, ponçage, nettoyage et cristallisation de vos surfaces en marbre.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="shell faq-grid">
+        <div class="faq-title">
+          <span class="eyebrow">Questions fréquentes</span>
+          <h2>Avant de nous écrire.</h2>
+          <p>Quelques informations utiles pour préparer votre demande et faciliter son traitement.</p>
+        </div>
+
+        <div class="faq">
+          <details>
+            <summary>Quelles informations dois-je fournir pour une demande liée à un devis ?</summary>
+            <p>Indiquez autant que possible le type de pierre, les dimensions ou surfaces concernées, la ville du projet, le type de réalisation ainsi que vos coordonnées. Si un devis existe déjà, ajoutez sa référence.</p>
+          </details>
+          <details>
+            <summary>Comment envoyer des photos de mon marbre ou de mon chantier ?</summary>
+            <p>Le formulaire est volontairement léger et n’accepte pas de pièces jointes. Pour des photos ou vidéos, utilisez le bouton WhatsApp et précisez votre nom ou la référence de votre dossier.</p>
+          </details>
+          <details>
+            <summary>Puis-je demander de l’aide pour l’entretien ou la cristallisation ?</summary>
+            <p>Oui. Sélectionnez « Entretien / cristallisation » dans le formulaire et décrivez l’état de la surface, son emplacement et le type de résultat recherché.</p>
+          </details>
+          <details>
+            <summary>Où se trouve le showroom A-F Marbre ?</summary>
+            <p>Le showroom est situé Route Azemmour Km24 Berahma, Maroc. Le lien « Showroom » présent sur cette page ouvre directement l’emplacement dans Google Maps.</p>
+          </details>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <div class="shell">
+      <div class="footer-grid">
+        <div class="footer-brand">
+          <strong>A-F Marbre</strong>
+          <p>Fourniture et pose de marbre, granite, onyx, quartz et travertin. Une sélection de pierres naturelles pour des projets durables et élégants.</p>
+        </div>
+        <div class="footer-col">
+          <span>Assistance</span>
+          <a href="#demande">Ouvrir une demande</a>
+          <a href="https://wa.me/212661959239" target="_blank" rel="noopener">WhatsApp</a>
+          <a href="https://status.afmarbre.com/" target="_blank" rel="noopener">État des services</a>
+        </div>
+        <div class="footer-col">
+          <span>A-F Marbre</span>
+          <a href="https://afmarbre.com/" target="_blank" rel="noopener">Site principal</a>
+          <a href="https://afmarbre.com/contact/" target="_blank" rel="noopener">Contact</a>
+          <a href="https://maps.app.goo.gl/oAFFAobrUDsu5sAE6" target="_blank" rel="noopener">Showroom</a>
+        </div>
+      </div>
+      <div class="footer-bottom">
+        <span>© 2026 A-F Marbre — Centre d’assistance</span>
+        <span>support.afmarbre.com</span>
+      </div>
+    </div>
+  </footer>
+</body>
+</html>`;
+}
+
+function renderNotFound() {
+  return `<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Page introuvable | A-F Marbre Support</title>
+  <style>
+    body{margin:0;background:#f5f2ec;color:#181715;font-family:system-ui,sans-serif;display:grid;place-items:center;min-height:100vh}
+    main{width:min(560px,calc(100% - 40px));padding:42px;background:#fff;border:1px solid #dcd4c9}
+    small{text-transform:uppercase;letter-spacing:.16em;color:#7a5b38;font-weight:800}
+    h1{font:400 48px/1 Georgia,serif;margin:12px 0 18px}
+    p{color:#716b62;line-height:1.7}
+    a{display:inline-block;margin-top:12px;padding:13px 18px;background:#181715;color:#fff;text-decoration:none;font-weight:700;font-size:13px}
+  </style>
+</head>
+<body>
+  <main>
+    <small>A-F Marbre Support</small>
+    <h1>Page introuvable.</h1>
+    <p>Cette adresse n’existe pas sur le centre d’assistance A-F Marbre.</p>
+    <a href="/">Retour au support</a>
+  </main>
 </body>
 </html>`;
 }
@@ -589,11 +1529,12 @@ function htmlResponse(body, status = 200) {
         "frame-src https://challenges.cloudflare.com",
         "connect-src 'self' https://challenges.cloudflare.com",
         "style-src 'self' 'unsafe-inline'",
-        "img-src 'self' data:",
+        "img-src 'self' data: https://afmarbre.com",
         "font-src 'self'",
         "form-action 'self'",
         "base-uri 'none'",
         "frame-ancestors 'none'",
+        "upgrade-insecure-requests",
       ].join("; "),
     },
   });
@@ -631,7 +1572,7 @@ function escapeHtml(value) {
 
 function emailRow(label, value) {
   return `<tr>
-    <td style="width:180px;border-bottom:1px solid #eee;color:#666"><strong>${escapeHtml(label)}</strong></td>
-    <td style="border-bottom:1px solid #eee">${escapeHtml(value)}</td>
+    <td style="width:185px;border-bottom:1px solid #ece7df;color:#756e65"><strong>${escapeHtml(label)}</strong></td>
+    <td style="border-bottom:1px solid #ece7df">${escapeHtml(value)}</td>
   </tr>`;
 }
