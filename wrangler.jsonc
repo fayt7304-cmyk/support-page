@@ -23,7 +23,7 @@
     "TURNSTILE_HOSTNAMES": "support.afmarbre.com",
     // Better Stack status page numeric ID (from status page URL in dashboard).
     // Pair with secret BETTERSTACK_API_TOKEN for authenticated status.
-    "BETTERSTACK_STATUS_PAGE_ID": "164028"
+    "BETTERSTACK_STATUS_PAGE_ID": ""
   },
   "services": [
     {

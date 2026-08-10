@@ -313,7 +313,7 @@ async function handleSupportRequest(request, env) {
 
     if (!apiResponse.ok) {
       const detail = (await apiResponse.text()).slice(0, 800);
-      console.error("Support Resend service failed:", apiResponse.status, detail);
+      console.error("Support email service failed:", apiResponse.status, detail);
       throw new Error(`Support service returned ${apiResponse.status}`);
     }
   } catch (error) {
