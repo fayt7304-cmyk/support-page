@@ -193,9 +193,11 @@ export default {
 
 async function handleSupportRequest(request, env) {
   const length = Number(request.headers.get("content-length") || "0");
-  if (length > 64_000) {
+  // Raised from 64 KB to accommodate photo attachments (base64 adds ~33% overhead
+  // on top of the ~9 MB raw cap below, plus form fields and multipart boundaries).
+  if (length > 12_000_000) {
     return htmlResponse(
-      renderPage(env, { errorMessage: "La demande est trop volumineuse." }),
+      renderPage(env, { errorMessage: "La demande est trop volumineuse. Réduisez la taille ou le nombre de photos." }),
       413
     );
   }
@@ -217,6 +219,49 @@ async function handleSupportRequest(request, env) {
     return Response.redirect(`${new URL(request.url).origin}/?success=1&ticket=AFM-RECU`, 303);
   }
 
+  const MAX_PHOTOS = 3;
+  const MAX_PHOTO_BYTES = 3 * 1024 * 1024; // 3 MB per file
+  const MAX_TOTAL_PHOTO_BYTES = 4 * 1024 * 1024; // 4 MB combined, leaves headroom under Cloudflare's 5 MiB email cap
+  const ALLOWED_PHOTO_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
+
+  const photoFiles = form
+    .getAll("photos")
+    .filter((f) => f instanceof File && f.size > 0)
+    .slice(0, MAX_PHOTOS);
+
+  let totalPhotoBytes = 0;
+  for (const f of photoFiles) {
+    totalPhotoBytes += f.size;
+  }
+
+  if (photoFiles.some((f) => !ALLOWED_PHOTO_TYPES.has(f.type))) {
+    return htmlResponse(
+      renderPage(env, { errorMessage: "Seules les photos JPEG, PNG ou WebP sont acceptées." }),
+      400
+    );
+  }
+  if (photoFiles.some((f) => f.size > MAX_PHOTO_BYTES)) {
+    return htmlResponse(
+      renderPage(env, { errorMessage: "Chaque photo doit faire 3 Mo maximum." }),
+      400
+    );
+  }
+  if (totalPhotoBytes > MAX_TOTAL_PHOTO_BYTES) {
+    return htmlResponse(
+      renderPage(env, { errorMessage: "La taille totale des photos dépasse 4 Mo. Réduisez le nombre ou la taille des photos." }),
+      400
+    );
+  }
+
+  const attachments = [];
+  for (const f of photoFiles) {
+    const buf = await f.arrayBuffer();
+    attachments.push({
+      filename: f.name || "photo.jpg",
+      content: arrayBufferToBase64(buf),
+    });
+  }
+
   const data = {
     name: field(form, "name"),
     email: field(form, "email").toLowerCase(),
@@ -232,6 +277,7 @@ async function handleSupportRequest(request, env) {
   if (validationError) {
     return htmlResponse(renderPage(env, { errorMessage: validationError }), 400);
   }
+
 
   if (
     !env.TURNSTILE_SECRET ||
@@ -305,6 +351,7 @@ async function handleSupportRequest(request, env) {
         subject: data.subject,
         message: data.message,
         client_ip: request.headers.get("CF-Connecting-IP") || "",
+        attachments,
       }),
     });
 
@@ -1630,7 +1677,7 @@ function renderPage(env, { successMessage = "", errorMessage = "", successTicket
       min-height: 40px;
       padding: 0 14px;
       background: var(--ink);
-      color: #fff;
+      color: var(--paper);
       text-decoration: none;
       font-size: 12px;
       font-weight: 800;
@@ -1662,9 +1709,9 @@ function renderPage(env, { successMessage = "", errorMessage = "", successTicket
         <a class="nav-link" href="https://afmarbre.com/">Site principal</a>
         <a class="nav-link" href="https://status.afmarbre.com/" target="_blank" rel="noopener">État des services</a>
         <div class="theme-switch" role="group" aria-label="Thème du site">
-          <button type="button" data-af-theme="system" aria-label="Thème système" title="Système">◐</button>
-          <button type="button" data-af-theme="light" aria-label="Thème clair" title="Clair">☀</button>
-          <button type="button" data-af-theme="dark" aria-label="Thème sombre" title="Sombre">☾</button>
+          <button type="button" data-af-theme="system" aria-label="Thème système" title="Système"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false"><path d="M12 2a10 10 0 1 0 0 20V2z" fill="currentColor"/><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.6"/></svg></button>
+          <button type="button" data-af-theme="light" aria-label="Thème clair" title="Clair"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg></button>
+          <button type="button" data-af-theme="dark" aria-label="Thème sombre" title="Sombre"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg></button>
         </div>
         <a class="nav-button" href="#demande">Ouvrir une demande</a>
       </nav>
@@ -1764,7 +1811,7 @@ function renderPage(env, { successMessage = "", errorMessage = "", successTicket
             }
             ${errorMessage ? `<div class="notice error" role="alert" aria-live="assertive">${escapeHtml(errorMessage)}</div>` : ""}
 
-            <form method="post" action="${SUBMIT_PATH}">
+            <form method="post" action="${SUBMIT_PATH}" enctype="multipart/form-data">
               <div class="row">
                 <div>
                   <label for="name">Nom complet *</label>
@@ -1818,7 +1865,12 @@ function renderPage(env, { successMessage = "", errorMessage = "", successTicket
               <div>
                 <label for="message">Votre message *</label>
                 <textarea id="message" name="message" minlength="10" maxlength="5000" required placeholder="Décrivez votre projet ou votre demande : matériau concerné, dimensions, ville, étape du projet et toute information utile."></textarea>
-                <div class="field-help">Vous souhaitez joindre des photos ? Envoyez-les directement à notre équipe via WhatsApp.</div>
+              </div>
+
+              <div>
+                <label for="photos">Photos (facultatif)</label>
+                <input id="photos" name="photos" type="file" accept="image/jpeg,image/png,image/webp" multiple>
+                <div class="field-help">Jusqu’à 3 photos, 3 Mo max chacune (JPEG, PNG ou WebP).</div>
               </div>
 
               <div class="trap" aria-hidden="true">
@@ -1947,7 +1999,7 @@ function renderPage(env, { successMessage = "", errorMessage = "", successTicket
           </details>
           <details>
             <summary data-i18n="faq2_q">Comment envoyer des photos de mon marbre ou de mon chantier ?</summary>
-            <p data-i18n="faq2_a">Le formulaire n’accepte pas de pièces jointes. Utilisez WhatsApp et précisez votre nom ou la référence de votre dossier.</p>
+            <p data-i18n="faq2_a">Le formulaire accepte jusqu’à 3 photos (JPEG, PNG ou WebP, 3 Mo max chacune). Vous pouvez aussi les envoyer via WhatsApp en précisant votre nom ou la référence de votre dossier.</p>
           </details>
           <details>
             <summary data-i18n="faq3_q">Quels sont les délais de pose habituels ?</summary>
@@ -2152,6 +2204,16 @@ function htmlResponse(body, status = 200) {
 function field(form, name) {
   const value = form.get(name);
   return typeof value === "string" ? value.trim() : "";
+}
+
+function arrayBufferToBase64(buf) {
+  const bytes = new Uint8Array(buf);
+  let binary = "";
+  const chunk = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunk) {
+    binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk));
+  }
+  return btoa(binary);
 }
 
 function oneLine(value) {
