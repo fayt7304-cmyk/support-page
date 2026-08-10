@@ -72,6 +72,16 @@ export default {
       });
     }
 
+    if (url.pathname === "/support-ui.js" && request.method === "GET") {
+      return new Response(renderSupportUiScript(), {
+        headers: {
+          "content-type": "application/javascript; charset=UTF-8",
+          "cache-control": "public, max-age=300",
+          "x-content-type-options": "nosniff",
+        },
+      });
+    }
+
     if (url.pathname === "/health" && request.method === "GET") {
       return new Response(JSON.stringify({ ok: true, service: "afmarbre-support" }), {
         headers: {
@@ -103,29 +113,63 @@ export default {
       return new Response(null, { status: 204 });
     }
 
-    // Proxy Better Stack public status JSON (avoids browser CORS issues).
+    // Status summary: Better Stack private API (secret) first, then public index.json.
     if (url.pathname === "/status-summary" && request.method === "GET") {
+      const publicUrl = "https://status.afmarbre.com/";
       try {
-        const statusUrl = env.STATUS_JSON_URL || "https://status.afmarbre.com/index.json";
-        const resp = await fetch(statusUrl, {
-          headers: { accept: "application/json" },
-          cf: { cacheTtl: 60, cacheEverything: true },
-        });
-        if (!resp.ok) {
-          return new Response(JSON.stringify({ ok: false, state: "unknown" }), {
+        let attrs = null;
+        let source = "none";
+
+        // 1) Authenticated Better Stack API (preferred when secrets are set)
+        if (env.BETTERSTACK_API_TOKEN && env.BETTERSTACK_STATUS_PAGE_ID) {
+          const apiUrl =
+            "https://uptime.betterstack.com/api/v2/status-pages/" +
+            encodeURIComponent(String(env.BETTERSTACK_STATUS_PAGE_ID).trim());
+          const apiResp = await fetch(apiUrl, {
+            headers: {
+              Authorization: "Bearer " + env.BETTERSTACK_API_TOKEN,
+              accept: "application/json",
+            },
+          });
+          if (apiResp.ok) {
+            const data = await apiResp.json();
+            attrs = data?.data?.attributes || null;
+            source = "betterstack_api";
+          } else {
+            console.error("Better Stack API status", apiResp.status, (await apiResp.text()).slice(0, 200));
+          }
+        }
+
+        // 2) Public status page JSON
+        if (!attrs) {
+          const statusUrl = env.STATUS_JSON_URL || "https://status.afmarbre.com/index.json";
+          const resp = await fetch(statusUrl, {
+            headers: { accept: "application/json" },
+            cf: { cacheTtl: 60, cacheEverything: true },
+          });
+          if (resp.ok) {
+            const data = await resp.json();
+            attrs = data?.data?.attributes || {};
+            source = "public_json";
+          }
+        }
+
+        if (!attrs) {
+          return new Response(JSON.stringify({ ok: false, state: "unknown", url: publicUrl, source }), {
             status: 200,
             headers: { "content-type": "application/json; charset=UTF-8", "cache-control": "public, max-age=30" },
           });
         }
-        const data = await resp.json();
-        const attrs = data?.data?.attributes || {};
+
+        const state = String(attrs.aggregate_state || "unknown").toLowerCase();
         return new Response(
           JSON.stringify({
             ok: true,
-            state: attrs.aggregate_state || "unknown",
+            state,
             announcement: attrs.announcement || null,
             updated_at: attrs.updated_at || null,
-            url: "https://status.afmarbre.com/",
+            url: publicUrl,
+            source,
           }),
           {
             headers: {
@@ -136,7 +180,7 @@ export default {
         );
       } catch (e) {
         console.error("status-summary failed", e?.message || e);
-        return new Response(JSON.stringify({ ok: false, state: "unknown", url: "https://status.afmarbre.com/" }), {
+        return new Response(JSON.stringify({ ok: false, state: "unknown", url: publicUrl }), {
           status: 200,
           headers: { "content-type": "application/json; charset=UTF-8", "cache-control": "public, max-age=30" },
         });
@@ -1524,6 +1568,11 @@ function renderPage(env, { successMessage = "", errorMessage = "", successTicket
     }
     .hours-pill.is-open .dot { background: #2f8f4e; }
     .hours-pill.is-closed .dot { background: #b4554a; }
+    html[data-theme="dark"] .hours-pill {
+      background: var(--surface-2);
+      border-color: var(--line);
+      color: var(--ink);
+    }
     .ticket-lookup {
       margin-top: 18px;
       padding-top: 18px;
@@ -1954,218 +2003,15 @@ function renderPage(env, { successMessage = "", errorMessage = "", successTicket
     </div>
   </footer>
 
-  <script>
-  (function () {
-    var LANG_KEY = "afmarbre_support_lang";
-    var strings = {
-      fr: {
-        skip: "Aller au formulaire",
-        status_ok: "Tous les services A-F Marbre fonctionnent normalement.",
-        status_degraded: "Certains services sont dégradés. Consultez la page de statut.",
-        status_down: "Incident en cours sur une partie des services.",
-        status_maint: "Maintenance planifiée en cours.",
-        status_unknown: "Statut temporairement indisponible.",
-        status_link: "Voir le statut",
-        hours_open: "Ouvert maintenant (heure du Maroc)",
-        hours_closed: "Fermé pour le moment (heure du Maroc)",
-        ticket_label: "Vous avez une référence AFM-… ?",
-        ticket_btn: "Suivre par e-mail",
-        ticket_help: "Ouvre un e-mail prérempli vers support@afmarbre.com.",
-        success_title: "Demande bien reçue",
-        success_s1: "Notre équipe répond en général sous 1 jour ouvré (souvent plus tôt).",
-        success_s2: "La réponse part depuis support@afmarbre.com — vérifiez vos spams.",
-        success_s3: "Pour des photos ou vidéos, envoyez-les sur WhatsApp en citant votre référence.",
-        success_wa: "WhatsApp avec ma référence",
-        success_mail: "Écrire un e-mail"
-      },
-      en: {
-        skip: "Skip to form",
-        status_ok: "All A-F Marbre services are operating normally.",
-        status_degraded: "Some services are degraded. Check the status page.",
-        status_down: "An incident is affecting part of our services.",
-        status_maint: "Scheduled maintenance is in progress.",
-        status_unknown: "Status temporarily unavailable.",
-        status_link: "View status",
-        hours_open: "Open now (Morocco time)",
-        hours_closed: "Currently closed (Morocco time)",
-        ticket_label: "Have an AFM-… reference?",
-        ticket_btn: "Follow up by email",
-        ticket_help: "Opens a prefilled email to support@afmarbre.com.",
-        success_title: "Request received",
-        success_s1: "We usually reply within 1 business day (often sooner).",
-        success_s2: "Replies come from support@afmarbre.com — check spam folders.",
-        success_s3: "For photos or videos, send them on WhatsApp with your reference.",
-        success_wa: "WhatsApp with my reference",
-        success_mail: "Write an email"
-      },
-      ar: {
-        skip: "الانتقال إلى النموذج",
-        status_ok: "جميع خدمات A-F Marbre تعمل بشكل طبيعي.",
-        status_degraded: "بعض الخدمات متأثرة. راجع صفحة الحالة.",
-        status_down: "هناك عطل يؤثر على جزء من الخدمات.",
-        status_maint: "صيانة مجدولة جارية.",
-        status_unknown: "الحالة غير متاحة مؤقتاً.",
-        status_link: "عرض الحالة",
-        hours_open: "مفتوح الآن (توقيت المغرب)",
-        hours_closed: "مغلق حالياً (توقيت المغرب)",
-        ticket_label: "لديك مرجع AFM-…؟",
-        ticket_btn: "متابعة عبر البريد",
-        ticket_help: "يفتح بريداً جاهزاً إلى support@afmarbre.com.",
-        success_title: "تم استلام طلبك",
-        success_s1: "نرد عادة خلال يوم عمل واحد (وأحياناً أسرع).",
-        success_s2: "الردود من support@afmarbre.com — تحقق من البريد غير المرغوب.",
-        success_s3: "للصور أو الفيديو، أرسلها عبر واتساب مع رقم المرجع.",
-        success_wa: "واتساب مع مرجعي",
-        success_mail: "إرسال بريد"
-      }
-    };
-
-    function metric(event) {
-      try {
-        fetch("/metrics", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ event: event }),
-          keepalive: true,
-        }).catch(function () {});
-      } catch (e) {}
-    }
-
-    function applyLang(lang) {
-      if (!strings[lang]) lang = "fr";
-      document.documentElement.lang = lang === "ar" ? "ar" : lang;
-      document.documentElement.dir = lang === "ar" ? "rtl" : "ltr";
-      var pack = strings[lang];
-      document.querySelectorAll("[data-i18n]").forEach(function (el) {
-        var k = el.getAttribute("data-i18n");
-        if (pack[k]) el.textContent = pack[k];
-      });
-      document.querySelectorAll(".lang-switch button").forEach(function (btn) {
-        var on = btn.getAttribute("data-lang") === lang;
-        btn.setAttribute("aria-pressed", on ? "true" : "false");
-      });
-      try { localStorage.setItem(LANG_KEY, lang); } catch (e) {}
-      // refresh dynamic status/hours text
-      updateHours();
-      if (window.__lastStatus) renderStatus(window.__lastStatus, pack);
-    }
-
-    function updateHours() {
-      var el = document.getElementById("hours-pill");
-      var text = document.getElementById("hours-pill-text");
-      if (!el || !text) return;
-      var lang = document.documentElement.lang || "fr";
-      if (lang === "ar") lang = "ar";
-      else if (lang !== "en") lang = "fr";
-      var pack = strings[lang] || strings.fr;
-      var now;
-      try {
-        now = new Date(new Date().toLocaleString("en-US", { timeZone: "Africa/Casablanca" }));
-      } catch (e) {
-        now = new Date();
-      }
-      var day = now.getDay(); // 0 Sun
-      var mins = now.getHours() * 60 + now.getMinutes();
-      var open = false;
-      if (day >= 1 && day <= 6) {
-        open = (mins >= 9 * 60 && mins < 13 * 60) || (mins >= 14 * 60 + 30 && mins < 18 * 60 + 30);
-      }
-      el.classList.toggle("is-open", open);
-      el.classList.toggle("is-closed", !open);
-      text.textContent = open ? pack.hours_open : pack.hours_closed;
-    }
-
-    function renderStatus(data, pack) {
-      var strip = document.getElementById("status-strip");
-      var label = document.getElementById("status-strip-text");
-      if (!strip || !label) return;
-      window.__lastStatus = data;
-      pack = pack || strings[document.documentElement.lang] || strings.fr;
-      var state = (data && data.state ? String(data.state) : "unknown").toLowerCase();
-      strip.classList.remove("is-degraded", "is-down", "is-maintenance");
-      var msg = pack.status_unknown;
-      var show = false;
-      if (state === "operational") {
-        msg = pack.status_ok;
-        show = false; // quiet when all good
-      } else if (state === "degraded") {
-        msg = pack.status_degraded;
-        strip.classList.add("is-degraded");
-        show = true;
-      } else if (state === "downtime") {
-        msg = pack.status_down;
-        strip.classList.add("is-down");
-        show = true;
-      } else if (state === "maintenance") {
-        msg = pack.status_maint;
-        strip.classList.add("is-maintenance");
-        show = true;
-      }
-      if (data && data.announcement) {
-        msg = data.announcement;
-        show = true;
-      }
-      label.textContent = msg;
-      if (show) {
-        strip.hidden = false;
-        strip.classList.add("is-visible");
-      } else {
-        strip.hidden = true;
-        strip.classList.remove("is-visible");
-      }
-    }
-
-    function loadStatus() {
-      fetch("/status-summary")
-        .then(function (r) { return r.json(); })
-        .then(function (data) { renderStatus(data); })
-        .catch(function () { renderStatus({ state: "unknown" }); });
-    }
-
-    document.addEventListener("DOMContentLoaded", function () {
-      metric("page_view");
-      var lang = "fr";
-      try { lang = localStorage.getItem(LANG_KEY) || "fr"; } catch (e) {}
-      applyLang(lang);
-
-      document.querySelectorAll(".lang-switch button").forEach(function (btn) {
-        btn.addEventListener("click", function () {
-          applyLang(btn.getAttribute("data-lang"));
-          metric("lang_change");
-        });
-      });
-
-      updateHours();
-      setInterval(updateHours, 60000);
-      loadStatus();
-      setInterval(loadStatus, 120000);
-
-      var ticketBtn = document.getElementById("ticket-lookup-btn");
-      var ticketInput = document.getElementById("ticket-ref");
-      if (ticketBtn && ticketInput) {
-        ticketBtn.addEventListener("click", function () {
-          var ref = (ticketInput.value || "").trim().toUpperCase();
-          if (!ref) {
-            ticketInput.focus();
-            return;
-          }
-          metric("ticket_lookup");
-          var subject = encodeURIComponent("Suivi dossier " + ref);
-          var body = encodeURIComponent("Bonjour,\\n\\nJe souhaite un point sur mon dossier.\\nRéférence : " + ref + "\\n\\nMerci.");
-          window.location.href = "mailto:support@afmarbre.com?subject=" + subject + "&body=" + body;
-        });
-      }
-
-      // Turnstile failure is hard to hook; track form errors via notice presence
-      if (document.querySelector(".notice.error")) metric("form_submit_error");
-      if (document.querySelector(".success-panel")) metric("form_submit_ok");
-    });
-  })();
-  </script>
+  <script src="/support-ui.js" defer></script>
 </body>
 </html>`;
 }
 
+
+function renderSupportUiScript() {
+  return "(function () {\n  var LANG_KEY = \"afmarbre_support_lang\";\n  var strings = {\n    fr: {\n      skip: \"Aller au formulaire\",\n      status_ok: \"Tous les services A-F Marbre fonctionnent normalement.\",\n      status_degraded: \"Certains services sont d\u00e9grad\u00e9s. Consultez la page de statut.\",\n      status_down: \"Incident en cours sur une partie des services.\",\n      status_maint: \"Maintenance planifi\u00e9e en cours.\",\n      status_unknown: \"Statut temporairement indisponible.\",\n      status_link: \"Voir le statut\",\n      hours_open: \"Ouvert maintenant (heure du Maroc)\",\n      hours_closed: \"Ferm\u00e9 pour le moment (heure du Maroc)\",\n      ticket_label: \"Vous avez une r\u00e9f\u00e9rence AFM-\u2026 ?\",\n      ticket_btn: \"Suivre par e-mail\",\n      ticket_help: \"Ouvre un e-mail pr\u00e9rempli vers support@afmarbre.com.\",\n      success_title: \"Demande bien re\u00e7ue\",\n      success_s1: \"Notre \u00e9quipe r\u00e9pond en g\u00e9n\u00e9ral sous 1 jour ouvr\u00e9 (souvent plus t\u00f4t).\",\n      success_s2: \"La r\u00e9ponse part depuis support@afmarbre.com \u2014 v\u00e9rifiez vos spams.\",\n      success_s3: \"Pour des photos ou vid\u00e9os, envoyez-les sur WhatsApp en citant votre r\u00e9f\u00e9rence.\",\n      success_wa: \"WhatsApp avec ma r\u00e9f\u00e9rence\",\n      success_mail: \"\u00c9crire un e-mail\"\n    },\n    en: {\n      skip: \"Skip to form\",\n      status_ok: \"All A-F Marbre services are operating normally.\",\n      status_degraded: \"Some services are degraded. Check the status page.\",\n      status_down: \"An incident is affecting part of our services.\",\n      status_maint: \"Scheduled maintenance is in progress.\",\n      status_unknown: \"Status temporarily unavailable.\",\n      status_link: \"View status\",\n      hours_open: \"Open now (Morocco time)\",\n      hours_closed: \"Currently closed (Morocco time)\",\n      ticket_label: \"Have an AFM-\u2026 reference?\",\n      ticket_btn: \"Follow up by email\",\n      ticket_help: \"Opens a prefilled email to support@afmarbre.com.\",\n      success_title: \"Request received\",\n      success_s1: \"We usually reply within 1 business day (often sooner).\",\n      success_s2: \"Replies come from support@afmarbre.com \u2014 check spam folders.\",\n      success_s3: \"For photos or videos, send them on WhatsApp with your reference.\",\n      success_wa: \"WhatsApp with my reference\",\n      success_mail: \"Write an email\"\n    },\n    ar: {\n      skip: \"\u0627\u0644\u0627\u0646\u062a\u0642\u0627\u0644 \u0625\u0644\u0649 \u0627\u0644\u0646\u0645\u0648\u0630\u062c\",\n      status_ok: \"\u062c\u0645\u064a\u0639 \u062e\u062f\u0645\u0627\u062a A-F Marbre \u062a\u0639\u0645\u0644 \u0628\u0634\u0643\u0644 \u0637\u0628\u064a\u0639\u064a.\",\n      status_degraded: \"\u0628\u0639\u0636 \u0627\u0644\u062e\u062f\u0645\u0627\u062a \u0645\u062a\u0623\u062b\u0631\u0629. \u0631\u0627\u062c\u0639 \u0635\u0641\u062d\u0629 \u0627\u0644\u062d\u0627\u0644\u0629.\",\n      status_down: \"\u0647\u0646\u0627\u0643 \u0639\u0637\u0644 \u064a\u0624\u062b\u0631 \u0639\u0644\u0649 \u062c\u0632\u0621 \u0645\u0646 \u0627\u0644\u062e\u062f\u0645\u0627\u062a.\",\n      status_maint: \"\u0635\u064a\u0627\u0646\u0629 \u0645\u062c\u062f\u0648\u0644\u0629 \u062c\u0627\u0631\u064a\u0629.\",\n      status_unknown: \"\u0627\u0644\u062d\u0627\u0644\u0629 \u063a\u064a\u0631 \u0645\u062a\u0627\u062d\u0629 \u0645\u0624\u0642\u062a\u0627\u064b.\",\n      status_link: \"\u0639\u0631\u0636 \u0627\u0644\u062d\u0627\u0644\u0629\",\n      hours_open: \"\u0645\u0641\u062a\u0648\u062d \u0627\u0644\u0622\u0646 (\u062a\u0648\u0642\u064a\u062a \u0627\u0644\u0645\u063a\u0631\u0628)\",\n      hours_closed: \"\u0645\u063a\u0644\u0642 \u062d\u0627\u0644\u064a\u0627\u064b (\u062a\u0648\u0642\u064a\u062a \u0627\u0644\u0645\u063a\u0631\u0628)\",\n      ticket_label: \"\u0644\u062f\u064a\u0643 \u0645\u0631\u062c\u0639 AFM-\u2026\u061f\",\n      ticket_btn: \"\u0645\u062a\u0627\u0628\u0639\u0629 \u0639\u0628\u0631 \u0627\u0644\u0628\u0631\u064a\u062f\",\n      ticket_help: \"\u064a\u0641\u062a\u062d \u0628\u0631\u064a\u062f\u0627\u064b \u062c\u0627\u0647\u0632\u0627\u064b \u0625\u0644\u0649 support@afmarbre.com.\",\n      success_title: \"\u062a\u0645 \u0627\u0633\u062a\u0644\u0627\u0645 \u0637\u0644\u0628\u0643\",\n      success_s1: \"\u0646\u0631\u062f \u0639\u0627\u062f\u0629 \u062e\u0644\u0627\u0644 \u064a\u0648\u0645 \u0639\u0645\u0644 \u0648\u0627\u062d\u062f (\u0648\u0623\u062d\u064a\u0627\u0646\u0627\u064b \u0623\u0633\u0631\u0639).\",\n      success_s2: \"\u0627\u0644\u0631\u062f\u0648\u062f \u0645\u0646 support@afmarbre.com \u2014 \u062a\u062d\u0642\u0642 \u0645\u0646 \u0627\u0644\u0628\u0631\u064a\u062f \u063a\u064a\u0631 \u0627\u0644\u0645\u0631\u063a\u0648\u0628.\",\n      success_s3: \"\u0644\u0644\u0635\u0648\u0631 \u0623\u0648 \u0627\u0644\u0641\u064a\u062f\u064a\u0648\u060c \u0623\u0631\u0633\u0644\u0647\u0627 \u0639\u0628\u0631 \u0648\u0627\u062a\u0633\u0627\u0628 \u0645\u0639 \u0631\u0642\u0645 \u0627\u0644\u0645\u0631\u062c\u0639.\",\n      success_wa: \"\u0648\u0627\u062a\u0633\u0627\u0628 \u0645\u0639 \u0645\u0631\u062c\u0639\u064a\",\n      success_mail: \"\u0625\u0631\u0633\u0627\u0644 \u0628\u0631\u064a\u062f\"\n    }\n  };\n\n  function metric(event) {\n    try {\n      fetch(\"/metrics\", {\n        method: \"POST\",\n        headers: { \"content-type\": \"application/json\" },\n        body: JSON.stringify({ event: event }),\n        keepalive: true\n      }).catch(function () {});\n    } catch (e) {}\n  }\n\n  function applyLang(lang) {\n    if (!strings[lang]) lang = \"fr\";\n    document.documentElement.lang = lang === \"ar\" ? \"ar\" : lang;\n    document.documentElement.dir = lang === \"ar\" ? \"rtl\" : \"ltr\";\n    var pack = strings[lang];\n    document.querySelectorAll(\"[data-i18n]\").forEach(function (el) {\n      var k = el.getAttribute(\"data-i18n\");\n      if (pack[k]) el.textContent = pack[k];\n    });\n    document.querySelectorAll(\".lang-switch button\").forEach(function (btn) {\n      var on = btn.getAttribute(\"data-lang\") === lang;\n      btn.setAttribute(\"aria-pressed\", on ? \"true\" : \"false\");\n    });\n    try { localStorage.setItem(LANG_KEY, lang); } catch (e) {}\n    updateHours();\n    if (window.__lastStatus) renderStatus(window.__lastStatus, pack);\n  }\n\n  function moroccoNowParts() {\n    try {\n      var fmt = new Intl.DateTimeFormat(\"en-GB\", {\n        timeZone: \"Africa/Casablanca\",\n        weekday: \"short\",\n        hour: \"2-digit\",\n        minute: \"2-digit\",\n        hourCycle: \"h23\"\n      });\n      var map = {};\n      fmt.formatToParts(new Date()).forEach(function (p) { map[p.type] = p.value; });\n      var wd = (map.weekday || \"\").toLowerCase().slice(0, 3);\n      var dayMap = { sun: 0, mon: 1, tue: 2, wed: 3, thu: 4, fri: 5, sat: 6 };\n      var day = dayMap[wd];\n      if (day === undefined) day = new Date().getDay();\n      var hour = parseInt(map.hour, 10);\n      var minute = parseInt(map.minute, 10);\n      if (isNaN(hour) || isNaN(minute)) throw new Error(\"bad time\");\n      return { day: day, mins: hour * 60 + minute };\n    } catch (e) {\n      var n = new Date();\n      return { day: n.getDay(), mins: n.getHours() * 60 + n.getMinutes() };\n    }\n  }\n\n  function updateHours() {\n    var el = document.getElementById(\"hours-pill\");\n    var text = document.getElementById(\"hours-pill-text\");\n    if (!el || !text) return;\n    var lang = document.documentElement.lang || \"fr\";\n    if (lang !== \"en\" && lang !== \"ar\") lang = \"fr\";\n    var pack = strings[lang] || strings.fr;\n    var now = moroccoNowParts();\n    var open = false;\n    if (now.day >= 1 && now.day <= 6) {\n      open =\n        (now.mins >= 9 * 60 && now.mins < 13 * 60) ||\n        (now.mins >= 14 * 60 + 30 && now.mins < 18 * 60 + 30);\n    }\n    el.classList.toggle(\"is-open\", open);\n    el.classList.toggle(\"is-closed\", !open);\n    text.textContent = open ? pack.hours_open : pack.hours_closed;\n  }\n\n  function renderStatus(data, pack) {\n    var strip = document.getElementById(\"status-strip\");\n    var label = document.getElementById(\"status-strip-text\");\n    if (!strip || !label) return;\n    window.__lastStatus = data;\n    var lang = document.documentElement.lang || \"fr\";\n    if (lang !== \"en\" && lang !== \"ar\") lang = \"fr\";\n    pack = pack || strings[lang] || strings.fr;\n    var state = (data && data.state ? String(data.state) : \"unknown\").toLowerCase();\n    strip.classList.remove(\"is-degraded\", \"is-down\", \"is-maintenance\");\n    var msg = pack.status_unknown;\n    var show = false;\n    if (state === \"operational\") {\n      msg = pack.status_ok;\n      show = false;\n    } else if (state === \"degraded\") {\n      msg = pack.status_degraded;\n      strip.classList.add(\"is-degraded\");\n      show = true;\n    } else if (state === \"downtime\") {\n      msg = pack.status_down;\n      strip.classList.add(\"is-down\");\n      show = true;\n    } else if (state === \"maintenance\") {\n      msg = pack.status_maint;\n      strip.classList.add(\"is-maintenance\");\n      show = true;\n    }\n    if (data && data.announcement) {\n      msg = data.announcement;\n      show = true;\n    }\n    label.textContent = msg;\n    if (show) {\n      strip.hidden = false;\n      strip.classList.add(\"is-visible\");\n    } else {\n      strip.hidden = true;\n      strip.classList.remove(\"is-visible\");\n    }\n  }\n\n  function loadStatus() {\n    fetch(\"/status-summary\")\n      .then(function (r) { return r.json(); })\n      .then(function (data) { renderStatus(data); })\n      .catch(function () { renderStatus({ state: \"unknown\" }); });\n  }\n\n  function boot() {\n    metric(\"page_view\");\n    var lang = \"fr\";\n    try { lang = localStorage.getItem(LANG_KEY) || \"fr\"; } catch (e) {}\n    applyLang(lang);\n    document.querySelectorAll(\".lang-switch button\").forEach(function (btn) {\n      btn.addEventListener(\"click\", function () {\n        applyLang(btn.getAttribute(\"data-lang\"));\n        metric(\"lang_change\");\n      });\n    });\n    updateHours();\n    setInterval(updateHours, 60000);\n    loadStatus();\n    setInterval(loadStatus, 120000);\n    var ticketBtn = document.getElementById(\"ticket-lookup-btn\");\n    var ticketInput = document.getElementById(\"ticket-ref\");\n    if (ticketBtn && ticketInput) {\n      ticketBtn.addEventListener(\"click\", function () {\n        var ref = (ticketInput.value || \"\").trim().toUpperCase();\n        if (!ref) {\n          ticketInput.focus();\n          return;\n        }\n        metric(\"ticket_lookup\");\n        var subject = encodeURIComponent(\"Suivi dossier \" + ref);\n        var body = encodeURIComponent(\n          \"Bonjour,\\n\\nJe souhaite un point sur mon dossier.\\nR\u00e9f\u00e9rence : \" + ref + \"\\n\\nMerci.\"\n        );\n        window.location.href = \"mailto:support@afmarbre.com?subject=\" + subject + \"&body=\" + body;\n      });\n    }\n    if (document.querySelector(\".notice.error\")) metric(\"form_submit_error\");\n    if (document.querySelector(\".success-panel\")) metric(\"form_submit_ok\");\n  }\n\n  if (document.readyState === \"loading\") {\n    document.addEventListener(\"DOMContentLoaded\", boot);\n  } else {\n    boot();\n  }\n})();\n";
+}
 
 function renderThemeScript() {
   // Plain string join — avoids nested regex/template issues in the Worker bundle.

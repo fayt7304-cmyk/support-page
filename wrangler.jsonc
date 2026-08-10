@@ -20,7 +20,10 @@
   "vars": {
     // Public Turnstile site key. Create the widget for support.afmarbre.com.
     "TURNSTILE_SITE_KEY": "0x4AAAAAAELV-6t0f-Bafy_y",
-    "TURNSTILE_HOSTNAMES": "support.afmarbre.com"
+    "TURNSTILE_HOSTNAMES": "support.afmarbre.com",
+    // Better Stack status page numeric ID (from status page URL in dashboard).
+    // Pair with secret BETTERSTACK_API_TOKEN for authenticated status.
+    "BETTERSTACK_STATUS_PAGE_ID": ""
   },
   "services": [
     {
